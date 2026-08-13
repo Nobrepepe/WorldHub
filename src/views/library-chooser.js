@@ -24,6 +24,7 @@ export function renderLibraryChooser({ onOpened }) {
       el('div', { class: 'chooser-actions' },
         el('button', { class: 'btn btn-primary', onclick: () => createFlow() }, 'Create a library →'),
         el('button', { class: 'btn', onclick: () => openFlow() }, 'Open a library →'),
+        el('button', { class: 'btn', onclick: () => restoreFlow() }, 'Restore a library from an archive →'),
       ),
     );
 
@@ -86,6 +87,14 @@ export function renderLibraryChooser({ onOpened }) {
     await openPath(picked.directory);
   };
 
+  const restoreFlow = async () => {
+    const restored = await callSafe('backup.restoreToNew');
+    if (restored) {
+      showToast(`“${restored.name}” was restored to ${restored.path}.`, 'good');
+      await openPath(restored.path);
+    }
+  };
+
   const openPath = async (directory) => {
     try {
       const opened = await call('library.open', { directory });
@@ -102,9 +111,49 @@ export function renderLibraryChooser({ onOpened }) {
       }
       onOpened(opened.library, opened.settings);
     } catch (err) {
+      if (err.code === 'library.corrupt_database' || err.code === 'database.unreadable') {
+        recoveryFlow(directory, err.message);
+        return;
+      }
       showToast(err.message, 'error');
       render();
     }
+  };
+
+  /** Corrupt main database: offer verified backups, never silent replacement. */
+  const recoveryFlow = async (directory, why) => {
+    const backups = (await callSafe('library.recoveryBackups', { directory })) ?? [];
+    const usable = backups.filter((backup) => backup.hasDatabase);
+    openOverlay((close) => el('div', {},
+      el('h2', {}, 'This library needs recovery'),
+      el('p', { class: 'dim' }, why),
+      el('p', { class: 'quiet', style: { margin: '0.6rem 0' } },
+        'Nothing is replaced automatically. Choose a verified backup below; the damaged database is kept aside in backups/.'),
+      usable.length === 0
+        ? el('p', { class: 'state-bad' }, 'No usable backups were found inside this library. Restore from a full archive instead.')
+        : el('ul', { class: 'row-list' },
+          ...usable.map((backup) => el('li', {},
+            el('button', {
+              class: 'recent-btn',
+              onclick: async () => {
+                try {
+                  await call('library.recoverDatabase', { directory, backupName: backup.name });
+                  close();
+                  showToast('The database was recovered from the backup.', 'good');
+                  await openPath(directory);
+                } catch (err) {
+                  showToast(err.message, 'error');
+                }
+              },
+            },
+              el('div', { class: 'name' }, backup.name),
+              el('div', { class: 'path' }, [backup.reason, backup.createdAt ? formatDate(backup.createdAt) : null].filter(Boolean).join(' · ')),
+            ),
+          ))),
+      el('div', { class: 'overlay-actions' },
+        el('button', { class: 'btn', onclick: () => close() }, 'Back to the chooser'),
+      ),
+    ), { label: 'Library recovery' });
   };
 
   const lockedFlow = (lock) => {

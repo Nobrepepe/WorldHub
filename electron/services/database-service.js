@@ -8,14 +8,17 @@ export function openDatabase(dbPath, { readOnly = false, fileMustExist = false }
   let db;
   try {
     db = new Database(dbPath, { readonly: readOnly, fileMustExist });
+    // better-sqlite3 opens lazily; the first pragma touches the file,
+    // so corruption surfaces here and routes to the recovery screen.
+    if (!readOnly) {
+      db.pragma('journal_mode = WAL');
+    }
+    db.pragma('foreign_keys = ON');
+    db.pragma('busy_timeout = 4000');
   } catch (err) {
-    throw domainError('database.unreadable', 'The library database could not be opened.', { cause: String(err?.message ?? err) });
+    try { db?.close(); } catch { /* already unusable */ }
+    throw domainError('database.unreadable', 'The library database could not be opened. It may be corrupt — restore a verified backup from the recovery screen.', { cause: String(err?.message ?? err) });
   }
-  if (!readOnly) {
-    db.pragma('journal_mode = WAL');
-  }
-  db.pragma('foreign_keys = ON');
-  db.pragma('busy_timeout = 4000');
   return db;
 }
 

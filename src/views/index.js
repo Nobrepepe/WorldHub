@@ -11,6 +11,8 @@ import { renderInbox } from './inbox.js';
 import { renderContracts, renderContractDetail } from './contracts.js';
 import { renderProductions, renderProductionDetail } from './productions.js';
 import { renderPublishPreview, renderPublicationDetail } from './publications.js';
+import { renderSettings } from './settings.js';
+import { renderIntegrity } from './integrity.js';
 
 /** Route registration for every view. Views are added per domain. */
 export function registerAllViews() {
@@ -34,4 +36,6 @@ export function registerAllViews() {
   registerRoute('/production/:id', renderProductionDetail);
   registerRoute('/production/:id/publish', renderPublishPreview);
   registerRoute('/publication/:id', renderPublicationDetail);
+  registerRoute('/settings', renderSettings);
+  registerRoute('/integrity', renderIntegrity);
 }

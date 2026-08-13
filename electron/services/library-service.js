@@ -170,7 +170,13 @@ export async function openLibrary(appContext, rootAbs, { readOnly = false, takeO
 
   appContext.library = library;
   rememberLibrary(rootAbs, descriptor.name);
-  if (!readOnly) recordActivity(db, 'library.opened', 'library', descriptor.libraryId);
+  if (!readOnly) {
+    recordActivity(db, 'library.opened', 'library', descriptor.libraryId);
+    // At most one automatic safety backup per day, when the library changed.
+    import('./backup-service.js')
+      .then(({ maybeDailyBackup }) => maybeDailyBackup(library))
+      .catch((err) => logError('backup.daily', err));
+  }
   logInfo('library', `Opened "${descriptor.name}"${readOnly ? ' (read-only)' : ''}`);
 
   return {

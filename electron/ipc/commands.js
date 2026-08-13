@@ -10,6 +10,7 @@ import './commands/asset-commands.js';
 import './commands/inbox-commands.js';
 import './commands/production-commands.js';
 import './commands/publication-commands.js';
+import './commands/maintenance-commands.js';
 
 export function registerAllCommands() {
   // Importing the modules above performs registration; this function
