@@ -3,3 +3,12 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
+
+# Never commit World Hub library data, even if a library is created
+# inside a clone of this repository.
+world-hub-library.json
+world-hub.sqlite3
+world-hub.sqlite3-wal
+world-hub.sqlite3-shm
+world-hub.lock
+*.AppImage
