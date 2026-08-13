@@ -69,7 +69,10 @@ async function openDevLibraryIfRequested() {
   if (!devPath) return;
   try {
     const { openLibrary } = await import('./services/library-service.js');
-    const result = await openLibrary(appContext, devPath, {});
+    let result = await openLibrary(appContext, devPath, {});
+    if (result.locked && result.lock.stale) {
+      result = await openLibrary(appContext, devPath, { takeOverLock: true });
+    }
     if (result.locked) logError('main.dev-library', new Error('dev library is locked'));
   } catch (err) {
     logError('main.dev-library', err);
