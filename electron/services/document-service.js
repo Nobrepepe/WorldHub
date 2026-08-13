@@ -224,7 +224,9 @@ export function setDocumentLinks(library, id, entityIds) {
       }
       link.run(id, entityId, i);
     });
-    db.prepare('UPDATE documents SET updated_at = ? WHERE id = ?').run(nowIso(), id);
+    // Links are published with the document at a claimed revision, so
+    // changing them is a meaningful change.
+    db.prepare('UPDATE documents SET revision = revision + 1, updated_at = ? WHERE id = ?').run(nowIso(), id);
   });
   return getDocument(library, id, { withContent: false });
 }

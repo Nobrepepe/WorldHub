@@ -124,8 +124,12 @@ export function openSearchPalette() {
 
 /** The /search destination with filters. */
 export async function renderSearchPage() {
-  const worlds = await call('entity.list', { type: 'world' });
-  const filters = { query: '', type: '', worldId: '' };
+  const [worlds, tags, roles] = await Promise.all([
+    call('entity.list', { type: 'world' }),
+    call('tag.list'),
+    call('asset.roles'),
+  ]);
+  const filters = { query: '', type: '', worldId: '', tagId: '', role: '', status: '', modifiedDays: '' };
 
   const host = el('div', {},
     el('header', { class: 'page-head' },
@@ -139,10 +143,17 @@ export async function renderSearchPage() {
 
   const run = debounce(async () => {
     if (!filters.query.trim()) { renderResults([], filters.query); return; }
+    const modifiedAfter = filters.modifiedDays
+      ? new Date(Date.now() - Number(filters.modifiedDays) * 24 * 60 * 60 * 1000).toISOString()
+      : undefined;
     const result = await callSafe('search.query', {
       query: filters.query,
       types: filters.type ? [filters.type] : undefined,
       worldId: filters.worldId || undefined,
+      tagId: filters.tagId || undefined,
+      role: filters.role || undefined,
+      status: filters.status || undefined,
+      modifiedAfter,
     });
     renderResults(result?.groups ?? [], filters.query);
   }, 140);
@@ -182,6 +193,52 @@ export async function renderSearchPage() {
           options: [{ value: '', label: 'All worlds' }, ...worlds.map((w) => ({ value: w.id, label: w.name }))],
           onChange: (value) => { filters.worldId = value; run(); },
           ariaLabel: 'Filter by world',
+        }),
+      ),
+      el('div', { class: 'field' },
+        el('span', { class: 'eyebrow' }, 'Tag'),
+        selectInput({
+          value: '',
+          options: [{ value: '', label: 'Any tag' }, ...tags.map((tag) => ({ value: tag.id, label: tag.name }))],
+          onChange: (value) => { filters.tagId = value; run(); },
+          ariaLabel: 'Filter by tag',
+        }),
+      ),
+      el('div', { class: 'field' },
+        el('span', { class: 'eyebrow' }, 'Asset role'),
+        selectInput({
+          value: '',
+          options: [{ value: '', label: 'Any role' }, ...roles.map((role) => ({ value: role, label: role }))],
+          onChange: (value) => { filters.role = value; run(); },
+          ariaLabel: 'Filter by asset role',
+        }),
+      ),
+      el('div', { class: 'field' },
+        el('span', { class: 'eyebrow' }, 'Lifecycle'),
+        selectInput({
+          value: '',
+          options: [
+            { value: '', label: 'Any status' },
+            { value: 'draft', label: 'Draft' },
+            { value: 'canonical', label: 'Canonical' },
+            { value: 'active', label: 'Active (assets)' },
+          ],
+          onChange: (value) => { filters.status = value; run(); },
+          ariaLabel: 'Filter by lifecycle status',
+        }),
+      ),
+      el('div', { class: 'field' },
+        el('span', { class: 'eyebrow' }, 'Modified'),
+        selectInput({
+          value: '',
+          options: [
+            { value: '', label: 'Any time' },
+            { value: '7', label: 'Last 7 days' },
+            { value: '30', label: 'Last 30 days' },
+            { value: '90', label: 'Last 90 days' },
+          ],
+          onChange: (value) => { filters.modifiedDays = value; run(); },
+          ariaLabel: 'Filter by modified date',
         }),
       ),
     ),

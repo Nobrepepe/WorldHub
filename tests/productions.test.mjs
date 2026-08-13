@@ -35,6 +35,22 @@ test('contract schema validation accepts the example and rejects malformed contr
   dupIds.productionFields.push({ ...dupIds.productionFields[0] });
   assert.ok(validateContractJson(dupIds).some((i) => i.code === 'contract.duplicate_id'));
 
+  // Per-record field and asset-set ids must be unique across the whole
+  // contract: production storage keys them by (entity, id), so a shared
+  // id would collide when one record appears in two selections.
+  const sharedIds = exampleContract();
+  sharedIds.entitySelections.push({
+    id: 'featured',
+    label: 'Featured characters',
+    entityTypes: ['character'],
+    min: 0,
+    fields: [{ id: 'caption', label: 'Caption', type: 'shortText' }],
+    assetSets: [{ id: 'portrait', label: 'Portrait', kinds: ['image'], exact: 1 }],
+  });
+  const sharedIssues = validateContractJson(sharedIds);
+  assert.equal(sharedIssues.filter((i) => i.code === 'contract.id_shared').length, 2,
+    'both the shared field id and the shared asset-set id are rejected');
+
   // Versioning: an edit creates a new version; the old one stays.
   const created = createContract(library, exampleContract());
   const edited = { ...exampleContract(), name: 'Edited Gallery' };

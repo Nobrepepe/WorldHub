@@ -52,6 +52,8 @@ Common attributes: `id` (slug), `label`, `required`, `hint`, `default`, plus per
 
 Each selection declares `entityTypes`, count bounds (`exact`, or `min`/`max`), optional per-selected-entity `fields`, and optional per-entity `assetSets`. Selections are ordered.
 
+Per-record field ids and asset-set ids must be unique across the **whole contract**, not just within one selection: production values and package content key them by (record, id), so a shared id from two selections would collide when the same record appears in both. Contract validation rejects shared ids.
+
 ### Asset sets
 
 An asset set declares allowed `kinds`, allowed semantic `roles` (see [ASSET_ROLES.md](ASSET_ROLES.md)), required rendition `recipes` (recipe IDs, never filenames), count bounds, and optional per-item `itemFields`.
@@ -128,11 +130,11 @@ All JSON in a package is deterministic: recursively sorted keys, stable record o
 ### catalog/
 
 - `entities.json` — every included record: `id`, `type`, `worldId`, `name`, `slug`, `summary`, `status`, `sortOrder`, `revision`, `aliases[]`, `tags[]`.
-- `worlds.json` — world profiles: `id`, `tagline`, `genre`, `tone`, `settingDescription`, `visualDirection`, `coverAssetId`, `backgroundAssetId`.
-- `characters.json` — character profiles: `id`, `role`, `age` (text), `appearance`, `personality`, `biography`, `voice`, `portraitAssetId`, `fullBodyAssetId`.
-- `relationships.json` — directed records whose both endpoints are included: `id`, `sourceId`, `targetId`, `type`, `label`, `inverseLabel`, `description`, `position`.
+- `worlds.json` — world profiles: `id`, `tagline`, `genre`, `tone`, `settingDescription`, `visualDirection`, `coverAssetId`, `backgroundAssetId`. Profile asset references are `null` unless that asset ships in this package — a package never contains dangling references.
+- `characters.json` — character profiles: `id`, `role`, `age` (text), `appearance`, `personality`, `biography`, `voice`, `portraitAssetId`, `fullBodyAssetId` (same self-containment rule).
+- `relationships.json` — directed, non-archived records whose both endpoints are included: `id`, `sourceId`, `targetId`, `type`, `label`, `inverseLabel`, `description`, `position`.
 - `tags.json` — `id`, `name`, `group` for every tag used in the snapshot.
-- `documents.json` — `id`, `title`, `path` (inside the package), `status`, `revision`, `wordCount`, `checksum`, `entityIds[]`. The Markdown bodies are real files under `documents/`.
+- `documents.json` — `id`, `title`, `path` (inside the package), `status`, `revision`, `wordCount`, `checksum`, `entityIds[]` (filtered to records this package includes). The Markdown bodies are real files under `documents/`.
 
 ### production/
 
@@ -161,7 +163,7 @@ One entry per (asset, recipe) pair:
 }
 ```
 
-Consumers resolve files only through `path`. Filenames are never derived.
+Consumers resolve files only through `path`. Filenames are never derived. `roles` lists the roles the asset **actually holds** for that record (intersected with the set's allowed roles when the contract restricts them) — never the contract's allowed list verbatim.
 
 ### checksums.json
 
@@ -169,8 +171,8 @@ SHA-256 of every other file in the package, keyed by package-relative path. A pa
 
 ### Publication guarantees
 
-- Assembly happens in a temporary work area; the snapshot is verified there (manifest schema, checksums, file existence, reference resolution) before being moved into place in one rename.
-- `current.json` is replaced atomically, only after success. A failed publication leaves the previous snapshot active and removes its work area.
+- Assembly happens in a temporary work area; the snapshot is verified there (manifest schema, checksums, file existence, and reference resolution — including relationship endpoints, profile art, and document links) before being moved into place in one rename.
+- The publication is recorded in World Hub's database first; `current.json` is replaced atomically as the very last step, so the pointer only ever names a fully recorded snapshot. If any step fails — including the pointer write itself — the previous snapshot stays active, the database is compensated, and the unreferenced package directory is removed.
 - Publications are never modified after creation and never cascade-deleted.
 
 ### Consumer algorithm

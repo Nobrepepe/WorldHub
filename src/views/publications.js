@@ -73,11 +73,21 @@ export async function renderPublishPreview({ id }) {
   } else {
     const line = (label, list) => el('p', { class: 'dim' },
       el('strong', {}, `${label}: `), list.length > 0 ? list.join(', ') : 'none');
+    const diff = preview.diff;
     diffSection.append(
-      el('p', { class: 'section-note' }, `The active publication is from ${formatDate(preview.diff.previousPublishedAt)}.`),
-      line('Added', preview.diff.added),
-      line('Changed', preview.diff.changed),
-      line('Removed', preview.diff.removed),
+      el('p', { class: 'section-note' }, `The active publication is from ${formatDate(diff.previousPublishedAt)}.`),
+      line('Records added', diff.added),
+      line('Records changed', diff.changed),
+      line('Records removed', diff.removed),
+      line('Documents added', diff.documents?.added ?? []),
+      line('Documents changed', diff.documents?.changed ?? []),
+      line('Documents removed', diff.documents?.removed ?? []),
+      line('Assets added', diff.assets?.added ?? []),
+      line('Assets changed', diff.assets?.changed ?? []),
+      line('Assets removed', diff.assets?.removed ?? []),
+      diff.contractChanged ? el('p', { class: 'dim' }, el('strong', {}, 'The contract version changed since the last publication.')) : null,
+      !diff.productionRevisionChanged && diff.added.length === 0 && diff.changed.length === 0 && diff.removed.length === 0
+        ? el('p', { class: 'section-note' }, 'The production itself is unchanged since the active publication.') : null,
     );
   }
   host.append(diffSection);

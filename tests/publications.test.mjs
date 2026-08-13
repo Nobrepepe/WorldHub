@@ -102,6 +102,55 @@ test('publishing creates a complete verified package with checksums over every f
   assert.equal(pointer.publicationId, publication.id);
 });
 
+test('packages are self-contained: actual roles, no dangling profile or document references, no archived relationships', async (t) => {
+  const { library, root, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const { production, world, nao, bram, portraitA, doc } = await readyGallery(library);
+  const { updateEntity: update, createRelationship } = await import('../electron/services/entity-service.js');
+  const { setDocumentLinks } = await import('../electron/services/document-service.js');
+
+  /* the portrait also carries a second role; only real roles export */
+  setAssetLinks(library, portraitA.id, [
+    { entityId: nao.id, role: 'character.portrait' },
+    { entityId: nao.id, role: 'reference.art' },
+  ]);
+
+  /* preferred art: nao's is packaged, bram's points at an unpackaged asset */
+  const strayPng = await sharp({ create: { width: 10, height: 10, channels: 3, background: { r: 5, g: 5, b: 5 } } }).png().toBuffer();
+  const stray = await importAsset(library, { buffer: strayPng, filename: 'stray.png', title: 'Stray art' });
+  update(library, nao.id, { profile: { portraitAssetId: portraitA.id } });
+  update(library, bram.id, { profile: { portraitAssetId: stray.id } });
+
+  /* the biography also links an entity outside the snapshot */
+  const outsider = createEntity(library, { type: 'character', name: 'Outsider' });
+  setDocumentLinks(library, doc.id, [nao.id, outsider.id]);
+
+  /* one live and one archived relationship */
+  createRelationship(library, { sourceId: nao.id, targetId: bram.id, relType: 'rival' });
+  const archived = createRelationship(library, { sourceId: nao.id, targetId: world.id, relType: 'exile' });
+  library.db.prepare(`UPDATE relationships SET status = 'archived' WHERE id = ?`).run(archived.id);
+
+  const publication = await publishProduction(library, production.id);
+  const packageDir = path.join(root, ...publication.directory.split('/'));
+  const read = (rel) => JSON.parse(fs.readFileSync(path.join(packageDir, ...rel.split('/')), 'utf8'));
+
+  const index = read('assets/index.json');
+  const naoPortrait = index.find((entry) => entry.assetId === portraitA.id && entry.recipeId === 'card_3x4');
+  assert.deepEqual(naoPortrait.roles, ['character.portrait'],
+    'the exported roles are the actual allowed roles of the asset, not the whole contract list');
+
+  const characters = read('catalog/characters.json');
+  assert.equal(characters.find((c) => c.id === nao.id).portraitAssetId, portraitA.id, 'packaged preferred art is kept');
+  assert.equal(characters.find((c) => c.id === bram.id).portraitAssetId, null, 'unpackaged preferred art is nulled, not dangling');
+
+  const documents = read('catalog/documents.json');
+  assert.deepEqual(documents.find((d) => d.id === doc.id).entityIds, [nao.id], 'document links outside the snapshot are filtered');
+
+  const relationships = read('catalog/relationships.json');
+  assert.ok(relationships.some((rel) => rel.type === 'rival'), 'live relationship included');
+  assert.ok(!relationships.some((rel) => rel.type === 'exile'), 'archived relationship excluded');
+});
+
 test('package JSON generation is deterministic', async (t) => {
   const { library, cleanup } = await makeTestLibrary();
   t.after(cleanup);

@@ -8,6 +8,7 @@ import { createEntity } from '../electron/services/entity-service.js';
 import {
   storeBlob, importAsset, addAssetVersion, getAsset, setAssetLinks, listAssets,
   setCrop, generateRendition, setAssetArchived, auditUnreferencedBlobs, trashUnreferencedBlobs,
+  updateRecipe,
 } from '../electron/services/asset-service.js';
 import { classifyFile } from '../electron/services/file-signatures.js';
 
@@ -104,7 +105,7 @@ test('renditions are deterministic, cached, and invalidated by crop changes', as
   const { library, root, cleanup } = await makeTestLibrary();
   t.after(cleanup);
 
-  const png = await makePng({ width: 640, height: 480 });
+  const png = await makePng({ width: 1400, height: 1100 });
   const asset = await importAsset(library, { buffer: png, filename: 'scene.png', title: 'Scene' });
   const versionId = asset.currentVersionId;
 
@@ -171,6 +172,43 @@ test('archiving hides assets without touching bytes; audit finds unreferenced bl
   const moved = trashUnreferencedBlobs(library, [stray.hash, hash]);
   assert.deepEqual(moved.map((m) => m.hash), [stray.hash], 'referenced blob is refused even when asked');
   assert.ok(fs.existsSync(path.join(root, 'trash', 'blobs', `${stray.hash}.png`)), 'recoverable trash');
+});
+
+test('upscaling is refused for every fit unless the recipe allows it', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const small = await makePng({ width: 200, height: 150 });
+  const asset = await importAsset(library, { buffer: small, filename: 'small.png', title: 'Small art' });
+
+  // cover recipe, allow_upscale off: the output stays at source scale.
+  const capped = await generateRendition(library, asset.currentVersionId, 'square');
+  assert.ok(capped.width <= 200 && capped.height <= 200, `not enlarged: ${capped.width}×${capped.height}`);
+
+  // allow upscaling: the full canvas is produced.
+  updateRecipe(library, 'square', { allowUpscale: true });
+  const upscaled = await generateRendition(library, asset.currentVersionId, 'square');
+  assert.equal(upscaled.width, 1024);
+  assert.equal(upscaled.height, 1024);
+});
+
+test('unknown semantic roles are refused everywhere links are made', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const nao = createEntity(library, { type: 'character', name: 'Nao' });
+  const asset = await importAsset(library, { buffer: await makePng(), filename: 'art.png', title: 'Art' });
+
+  assert.throws(
+    () => setAssetLinks(library, asset.id, [{ entityId: nao.id, role: 'character.portait' }]),
+    /not a World Hub semantic role/,
+    'typo roles never become data',
+  );
+  const tinyPng = await makePng({ width: 12, height: 12 });
+  await assert.rejects(
+    () => importAsset(library, { buffer: tinyPng, filename: 'x.png', title: 'X', entityId: nao.id, role: 'made.up' }),
+    /not a World Hub semantic role/,
+  );
+  setAssetLinks(library, asset.id, [{ entityId: nao.id, role: 'character.portrait' }]);
 });
 
 test('missing blob is reported when generating a rendition', async (t) => {

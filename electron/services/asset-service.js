@@ -38,6 +38,13 @@ function sha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
+/** World Hub owns the role vocabulary; unknown roles never become data. */
+function assertKnownRole(role) {
+  if (!ASSET_ROLES.includes(role)) {
+    throw domainError('asset.unknown_role', `"${role}" is not a World Hub semantic role.`, { allowed: ASSET_ROLES });
+  }
+}
+
 /* ---------------- blobs ---------------- */
 
 /**
@@ -106,6 +113,7 @@ export async function importAsset(library, { buffer, filename, title, importedFr
     `).run(versionId, id, blob.hash, filename, importedFrom, now);
     db.prepare('UPDATE assets SET current_version_id = ? WHERE id = ?').run(versionId, id);
     if (entityId && role) {
+      assertKnownRole(role);
       db.prepare('INSERT OR IGNORE INTO asset_links (asset_id, entity_id, role, position) VALUES (?, ?, ?, 0)').run(id, entityId, role);
     }
     recordActivity(db, 'asset.imported', 'asset', id, filename);
@@ -238,6 +246,7 @@ export function setAssetLinks(library, assetId, links) {
       if (!db.prepare('SELECT id FROM entities WHERE id = ?').get(link.entityId)) {
         throw domainError('entity.missing', 'A linked record no longer exists.');
       }
+      assertKnownRole(link.role);
       insert.run(assetId, link.entityId, link.role, i);
     });
     syncAssetIndex(library, assetId);
@@ -473,7 +482,10 @@ async function renderImage(sourceAbs, recipe, crop) {
     fit,
     position: 'centre',
     background,
-    withoutEnlargement: !recipe.allow_upscale && recipe.fit === 'contain',
+    // Honored for every fit: when upscaling is off, a small original
+    // yields a smaller-than-canvas rendition (its true dimensions are
+    // recorded in the database and in assets/index.json).
+    withoutEnlargement: !recipe.allow_upscale,
   });
 
   if (!recipe.preserve_alpha) {

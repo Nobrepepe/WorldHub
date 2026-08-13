@@ -86,6 +86,7 @@ test('one document links to several entities without copying', async (t) => {
   setDocumentLinks(library, doc.id, [a.id, b.id]);
   const loaded = getDocument(library, doc.id, { withContent: false });
   assert.deepEqual(loaded.links.map((l) => l.name).sort(), ['Ari', 'Bram']);
+  assert.ok(loaded.revision > doc.revision, 'links are published with the document, so changing them bumps the revision');
 
   assert.equal(listDocuments(library, { entityId: b.id }).length, 1);
   assert.equal(listDocuments(library, { entityId: a.id })[0].id, doc.id);

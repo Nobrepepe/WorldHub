@@ -70,8 +70,8 @@ export function resolveSnapshot(library, productionId) {
     return { row, aliases, tags };
   }).sort((a, b) => a.row.id.localeCompare(b.row.id));
 
-  /* relationships fully inside the included set */
-  const relationships = db.prepare('SELECT * FROM relationships ORDER BY id').all()
+  /* non-archived relationships fully inside the included set */
+  const relationships = db.prepare(`SELECT * FROM relationships WHERE status != 'archived' ORDER BY id`).all()
     .filter((rel) => entityIds.has(rel.source_id) && entityIds.has(rel.target_id));
 
   /* documents by contract mode */
@@ -111,9 +111,18 @@ export function resolveSnapshot(library, productionId) {
         FROM asset_versions v JOIN blobs b ON b.hash = v.blob_hash
         WHERE v.id = ?
       `).get(asset.current_version_id);
+      // Export the roles the asset actually holds — never the
+      // contract's allowed list. Entity-scoped sets read the roles of
+      // that specific link; production-level sets read all links.
+      const actualRoles = ownerEntity
+        ? db.prepare('SELECT role FROM asset_links WHERE asset_id = ? AND entity_id = ? ORDER BY role').all(item.assetId, ownerEntity).map((r) => r.role)
+        : db.prepare('SELECT DISTINCT role FROM asset_links WHERE asset_id = ? ORDER BY role').all(item.assetId).map((r) => r.role);
+      const roles = (set.roles && set.roles.length > 0)
+        ? actualRoles.filter((role) => set.roles.includes(role))
+        : actualRoles;
       assetItems.push({
         setId: set.id,
-        roles: set.roles ?? [],
+        roles,
         recipes: (set.recipes && set.recipes.length > 0) ? set.recipes : ['original'],
         entityId: ownerEntity ?? null,
         position: index,
@@ -188,12 +197,16 @@ export async function previewPublication(library, productionId) {
     estimatedBytes += Buffer.byteLength(doc.content_cache ?? '', 'utf8');
   }
 
-  /* diff against the current publication */
+  /* diff against the current publication: records, documents, exact
+     asset versions, and the contract itself */
   const current = readCurrentPointer(library, snapshot.production.slug);
   let diff = null;
   if (current) {
     try {
-      const manifest = readPublicationManifest(library, snapshot.production.slug, current.publicationId);
+      const packageDir = `productions/${snapshot.production.slug}/publications/${current.publicationId}`;
+      const readSection = (rel) => JSON.parse(fs.readFileSync(resolveInsideNoSymlink(library.root, `${packageDir}/${rel}`), 'utf8'));
+      const manifest = readSection('manifest.json');
+
       const oldEntities = new Map(manifest.entities.map((entry) => [entry.id, entry.revision]));
       const added = [];
       const changed = [];
@@ -202,10 +215,49 @@ export async function previewPublication(library, productionId) {
         else if (oldEntities.get(entity.row.id) !== entity.row.revision) changed.push(entity.row.name);
         oldEntities.delete(entity.row.id);
       }
-      const removedIds = [...oldEntities.keys()];
-      const removed = removedIds.map((entityId) =>
+      const removed = [...oldEntities.keys()].map((entityId) =>
         db.prepare('SELECT name FROM entities WHERE id = ?').get(entityId)?.name ?? entityId);
-      diff = { added, changed, removed, previousPublishedAt: manifest.publishedAt };
+
+      /* documents by id + revision */
+      const oldDocs = new Map(readSection('catalog/documents.json').map((doc) => [doc.id, doc]));
+      const docDiff = { added: [], changed: [], removed: [] };
+      for (const doc of snapshot.documents) {
+        if (!oldDocs.has(doc.id)) docDiff.added.push(doc.title);
+        else if (oldDocs.get(doc.id).revision !== doc.revision) docDiff.changed.push(doc.title);
+        oldDocs.delete(doc.id);
+      }
+      docDiff.removed = [...oldDocs.values()].map((doc) => doc.title);
+
+      /* assets by id → exact version */
+      const oldAssets = new Map();
+      for (const entry of readSection('assets/index.json')) {
+        if (!oldAssets.has(entry.assetId)) oldAssets.set(entry.assetId, { title: entry.assetTitle, versions: new Set() });
+        oldAssets.get(entry.assetId).versions.add(entry.versionId);
+      }
+      const newAssets = new Map();
+      for (const item of snapshot.assetItems) {
+        if (!newAssets.has(item.asset.id)) newAssets.set(item.asset.id, { title: item.asset.title, versions: new Set() });
+        newAssets.get(item.asset.id).versions.add(item.version.id);
+      }
+      const assetDiff = { added: [], changed: [], removed: [] };
+      for (const [assetId, next] of newAssets) {
+        const previous = oldAssets.get(assetId);
+        if (!previous) assetDiff.added.push(next.title);
+        else if ([...next.versions].some((versionId) => !previous.versions.has(versionId))) assetDiff.changed.push(`${next.title} (new version)`);
+        oldAssets.delete(assetId);
+      }
+      assetDiff.removed = [...oldAssets.values()].map((asset) => asset.title);
+
+      diff = {
+        added,
+        changed,
+        removed,
+        documents: docDiff,
+        assets: assetDiff,
+        contractChanged: manifest.contract.version !== snapshot.production.contractVersion,
+        productionRevisionChanged: manifest.production.revision !== snapshot.production.revision,
+        previousPublishedAt: manifest.publishedAt,
+      };
     } catch (err) {
       diff = { error: `The current publication could not be read: ${err.message}` };
     }
@@ -256,6 +308,10 @@ export async function publishProduction(library, productionId) {
   const tmpRel = `tmp/publish-${publicationId}`;
   const tmpAbs = resolveInsideNoSymlink(library.root, tmpRel);
 
+  const finalRel = `productions/${slug}/publications/${publicationId}`;
+  const finalAbs = resolveInsideNoSymlink(library.root, finalRel);
+  let movedToFinal = false;
+
   try {
     /* 4-5. generate renditions and assemble in tmp */
     const assembly = await assemblePackage(library, snapshot, publicationId, publishedAt, tmpAbs);
@@ -264,21 +320,14 @@ export async function publishProduction(library, productionId) {
     verifyAssembledPackage(tmpAbs, assembly);
 
     /* 7. move into the immutable publication directory */
-    const finalRel = `productions/${slug}/publications/${publicationId}`;
-    const finalAbs = resolveInsideNoSymlink(library.root, finalRel);
     fs.mkdirSync(path.dirname(finalAbs), { recursive: true });
     fs.renameSync(tmpAbs, finalAbs);
+    movedToFinal = true;
 
-    /* 8. atomically replace current.json */
-    const pointerAbs = resolveInsideNoSymlink(library.root, `productions/${slug}/current.json`);
-    writeFileAtomic(pointerAbs, stableJson({
-      format: 'world-hub-current-publication',
-      publicationId,
-      manifestPath: `publications/${publicationId}/manifest.json`,
-      updatedAt: publishedAt,
-    }));
-
-    /* 9. record rows */
+    /* 8. record rows — before the pointer moves, so the database and
+       the pointer can never disagree about what is active. */
+    const previousCurrentId = db.prepare('SELECT id FROM publications WHERE production_id = ? AND is_current = 1')
+      .get(productionId)?.id ?? null;
     inTransaction(db, () => {
       db.prepare('UPDATE publications SET is_current = 0 WHERE production_id = ?').run(productionId);
       db.prepare(`
@@ -293,12 +342,34 @@ export async function publishProduction(library, productionId) {
       }
       recordActivity(db, 'publication.created', 'publication', publicationId, `${snapshot.production.name} → ${assembly.files.length} files`);
     });
+
+    /* 9. atomically replace current.json — the last step, so the
+       pointer only ever names a fully recorded publication. If this
+       write fails, the database rows are compensated away. */
+    try {
+      const pointerAbs = resolveInsideNoSymlink(library.root, `productions/${slug}/current.json`);
+      writeFileAtomic(pointerAbs, stableJson({
+        format: 'world-hub-current-publication',
+        publicationId,
+        manifestPath: `publications/${publicationId}/manifest.json`,
+        updatedAt: publishedAt,
+      }));
+    } catch (pointerErr) {
+      inTransaction(db, () => {
+        db.prepare('DELETE FROM publication_files WHERE publication_id = ?').run(publicationId);
+        db.prepare('DELETE FROM publications WHERE id = ?').run(publicationId);
+        if (previousCurrentId) db.prepare('UPDATE publications SET is_current = 1 WHERE id = ?').run(previousCurrentId);
+      });
+      throw pointerErr;
+    }
+
     logInfo('publish', `Published ${slug}/${publicationId} (${assembly.files.length} files)`);
     return getPublication(library, publicationId);
   } catch (err) {
-    /* failure: current.json untouched; remove the incomplete work area */
+    /* failure: current.json untouched; remove the unreferenced package
+       directory or the incomplete work area */
     try {
-      fs.rmSync(tmpAbs, { recursive: true, force: true });
+      fs.rmSync(movedToFinal ? finalAbs : tmpAbs, { recursive: true, force: true });
     } catch (cleanupErr) {
       logError('publish.cleanup', cleanupErr);
     }
@@ -341,6 +412,13 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
   }));
   writePackageFile('catalog/entities.json', stableJson(entitiesJson));
 
+  /* A package must be self-contained: profile art references are kept
+     only when that asset ships in this package, and document links are
+     kept only for entities the package includes. */
+  const includedEntityIds = new Set(snapshot.entities.map(({ row }) => row.id));
+  const includedAssetIds = new Set(snapshot.assetItems.map((item) => item.asset.id));
+  const packagedAssetId = (assetId) => (assetId && includedAssetIds.has(assetId) ? assetId : null);
+
   const worldsJson = snapshot.entities
     .filter(({ row }) => row.type === 'world')
     .map(({ row }) => {
@@ -352,8 +430,8 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
         tone: profile.tone ?? '',
         settingDescription: profile.setting_description ?? '',
         visualDirection: profile.visual_direction ?? '',
-        coverAssetId: profile.cover_asset_id ?? null,
-        backgroundAssetId: profile.background_asset_id ?? null,
+        coverAssetId: packagedAssetId(profile.cover_asset_id),
+        backgroundAssetId: packagedAssetId(profile.background_asset_id),
       };
     });
   writePackageFile('catalog/worlds.json', stableJson(worldsJson));
@@ -370,8 +448,8 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
         personality: profile.personality ?? '',
         biography: profile.biography ?? '',
         voice: profile.voice ?? '',
-        portraitAssetId: profile.portrait_asset_id ?? null,
-        fullBodyAssetId: profile.full_body_asset_id ?? null,
+        portraitAssetId: packagedAssetId(profile.portrait_asset_id),
+        fullBodyAssetId: packagedAssetId(profile.full_body_asset_id),
       };
     });
   writePackageFile('catalog/characters.json', stableJson(charactersJson));
@@ -397,7 +475,8 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
     const packagePath = `documents/${doc.id}.md`;
     writePackageFile(packagePath, content);
     const links = db.prepare('SELECT entity_id FROM document_links WHERE document_id = ? ORDER BY position').all(doc.id)
-      .map((link) => link.entity_id);
+      .map((link) => link.entity_id)
+      .filter((entityId) => includedEntityIds.has(entityId));
     documentsJson.push({
       id: doc.id,
       title: doc.title,
@@ -576,6 +655,38 @@ function verifyAssembledPackage(workAbs, assembly) {
   for (const rel of relationships) {
     if (!entityIds.has(rel.sourceId) || !entityIds.has(rel.targetId)) {
       throw domainError('publish.relationship_dangling', 'A packaged relationship references a record outside the package.');
+    }
+  }
+
+  /* profile art references resolve within the packaged assets */
+  const packagedAssetIds = new Set(assetIndex.map((entry) => entry.assetId));
+  const worlds = JSON.parse(fs.readFileSync(path.join(workAbs, 'catalog', 'worlds.json'), 'utf8'));
+  for (const world of worlds) {
+    for (const ref of [world.coverAssetId, world.backgroundAssetId]) {
+      if (ref && !packagedAssetIds.has(ref)) {
+        throw domainError('publish.profile_asset_dangling', 'A world profile references an asset outside the package.');
+      }
+    }
+  }
+  const characters = JSON.parse(fs.readFileSync(path.join(workAbs, 'catalog', 'characters.json'), 'utf8'));
+  for (const character of characters) {
+    for (const ref of [character.portraitAssetId, character.fullBodyAssetId]) {
+      if (ref && !packagedAssetIds.has(ref)) {
+        throw domainError('publish.profile_asset_dangling', 'A character profile references an asset outside the package.');
+      }
+    }
+  }
+
+  /* document links resolve within the packaged entities */
+  const documents = JSON.parse(fs.readFileSync(path.join(workAbs, 'catalog', 'documents.json'), 'utf8'));
+  for (const doc of documents) {
+    for (const entityId of doc.entityIds ?? []) {
+      if (!entityIds.has(entityId)) {
+        throw domainError('publish.document_link_dangling', 'A packaged document references a record outside the package.');
+      }
+    }
+    if (!fs.existsSync(path.join(workAbs, ...doc.path.split('/')))) {
+      throw domainError('publish.document_file_missing', `catalog/documents.json points at a missing file: ${doc.path}.`);
     }
   }
   void assembly;

@@ -159,6 +159,75 @@ test('full-text search finds names, aliases, profiles, and explains matches', as
   assert.equal(result.groups.length, 0);
 });
 
+test('tag changes are meaningful: entity revision bumps and every subject reindexes', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const nao = createEntity(library, { type: 'character', name: 'Nao' });
+  const before = getEntity(library, nao.id).revision;
+  setSubjectTags(library, 'entity', nao.id, ['sky court']);
+  assert.ok(getEntity(library, nao.id).revision > before, 'entity tags are published, so tagging bumps the revision');
+  setSubjectTags(library, 'entity', nao.id, ['sky court']);
+  assert.equal(getEntity(library, nao.id).revision, before + 1, 'an unchanged tag set does not bump again');
+
+  // Document and asset tag changes keep the search index fresh.
+  const { createDocument } = await import('../electron/services/document-service.js');
+  const doc = createDocument(library, { title: 'Plain notes', content: 'nothing special here' });
+  setSubjectTags(library, 'document', doc.id, ['moonlore']);
+  let found = searchLibrary(library, { query: 'moonlore' });
+  assert.equal(found.groups[0]?.items[0]?.title, 'Plain notes', 'document searchable by its new tag');
+
+  const sharp = (await import('sharp')).default;
+  const { importAsset } = await import('../electron/services/asset-service.js');
+  const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+  const asset = await importAsset(library, { buffer: png, filename: 'plain.png', title: 'Plain art' });
+  setSubjectTags(library, 'asset', asset.id, ['starfall']);
+  found = searchLibrary(library, { query: 'starfall' });
+  assert.equal(found.groups[0]?.items[0]?.title, 'Plain art', 'asset searchable by its new tag');
+});
+
+test('search filters: world excludes unrelated results; tag, status, role, and date narrow correctly', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const sharp = (await import('sharp')).default;
+  const { importAsset, setAssetLinks } = await import('../electron/services/asset-service.js');
+  const { createDocument } = await import('../electron/services/document-service.js');
+
+  const vel = createEntity(library, { type: 'world', name: 'Vel' });
+  const aster = createEntity(library, { type: 'world', name: 'Aster' });
+  const nao = createEntity(library, { type: 'character', name: 'Moonlit Nao', worldId: vel.id });
+  const bram = createEntity(library, { type: 'character', name: 'Moonlit Bram', worldId: aster.id });
+  updateEntity(library, bram.id, { status: 'canonical' });
+  createDocument(library, { title: 'Moonlit notes', entityIds: [nao.id], content: 'moonlit prose' });
+  const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 9, g: 9, b: 9 } } }).png().toBuffer();
+  const art = await importAsset(library, { buffer: png, filename: 'moonlit.png', title: 'Moonlit art' });
+  setAssetLinks(library, art.id, [{ entityId: bram.id, role: 'character.portrait' }]);
+
+  /* world filter: linked documents/assets resolve their world; others drop out */
+  const inVel = searchLibrary(library, { query: 'moonlit', worldId: vel.id });
+  const velTitles = inVel.groups.flatMap((g) => g.items.map((i) => i.title));
+  assert.ok(velTitles.includes('Moonlit Nao') && velTitles.includes('Moonlit notes'));
+  assert.ok(!velTitles.includes('Moonlit Bram') && !velTitles.includes('Moonlit art'), 'other-world results are excluded, not passed through');
+
+  /* status filter */
+  const canonical = searchLibrary(library, { query: 'moonlit', status: 'canonical' });
+  assert.deepEqual(canonical.groups.flatMap((g) => g.items.map((i) => i.title)), ['Moonlit Bram']);
+
+  /* role filter narrows to assets holding that role */
+  const portraits = searchLibrary(library, { query: 'moonlit', role: 'character.portrait' });
+  assert.deepEqual(portraits.groups.flatMap((g) => g.items.map((i) => i.title)), ['Moonlit art']);
+
+  /* tag filter */
+  setSubjectTags(library, 'entity', nao.id, ['chosen']);
+  const tag = listTags(library).find((entry) => entry.name === 'chosen');
+  const tagged = searchLibrary(library, { query: 'moonlit', tagId: tag.id });
+  assert.deepEqual(tagged.groups.flatMap((g) => g.items.map((i) => i.title)), ['Moonlit Nao']);
+
+  /* modified date */
+  const future = new Date(Date.now() + 60_000).toISOString();
+  assert.equal(searchLibrary(library, { query: 'moonlit', modifiedAfter: future }).groups.length, 0);
+});
+
 test('rebuild search index restores drifted state', async (t) => {
   const { library, cleanup } = await makeTestLibrary();
   t.after(cleanup);

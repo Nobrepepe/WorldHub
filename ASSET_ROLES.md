@@ -33,6 +33,8 @@ Roles say what art *means*, never how it is stored. The built-in vocabulary:
 
 The Inbox may suggest a role from the file path, but a person always confirms it. Contract asset sets constrain which roles they accept, and validation enforces that a chosen asset is linked to the selected entity under an allowed role.
 
+The vocabulary is enforced at the service boundary: linking or importing with a role outside this list is refused, so typos never become permanent data. Published packages export the roles an asset **actually holds** for the linked record, never a contract's allowed list.
+
 ## Built-in rendition recipes
 
 | Recipe | Canvas | Default fit | Output |
@@ -46,6 +48,8 @@ The Inbox may suggest a role from the file path, but a person always confirms it
 | `original` | unchanged | none | original bytes |
 
 A recipe records dimensions, fit, output format, quality, alpha behavior, background, and whether upscaling is allowed. Recipes are editable (Settings → rendition quality sets the default; each recipe can be tuned via the API). Contracts refer to recipe IDs, never filenames.
+
+`allow_upscale` is honored for every fit: when it is off (the default) and the original is smaller than the canvas, the rendition keeps the original's scale instead of being enlarged, and its true dimensions are recorded in the database and in `assets/index.json`. Enable upscaling on a recipe when exact canvas dimensions matter more than sharpness.
 
 ## Crops and determinism
 

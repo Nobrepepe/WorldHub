@@ -51,11 +51,36 @@ export function validateContractJson(contract) {
     }
     seen.add(key);
   };
+
+  /* Per-record field ids and asset-set ids must be unique across the
+     whole contract, not just within one selection: production storage
+     and package content key them by (entity, id), so a shared id from
+     two selections would collide when the same record appears in both. */
+  const entityFieldOwners = new Map();
+  const assetSetOwners = new Map();
+  const checkGlobal = (map, id, owner, what) => {
+    const existing = map.get(id);
+    if (existing !== undefined && existing !== owner) {
+      issues.push({
+        severity: 'error',
+        code: 'contract.id_shared',
+        message: `The ${what} id "${id}" is used by both "${existing}" and "${owner}"; ${what} ids must be unique across the whole contract.`,
+      });
+    }
+    map.set(id, owner);
+  };
+
   for (const field of contract.productionFields ?? []) checkId(field.id, 'productionFields');
   for (const selection of contract.entitySelections ?? []) {
     checkId(selection.id, 'entitySelections');
-    for (const field of selection.fields ?? []) checkId(field.id, `selection ${selection.id} fields`);
-    for (const set of selection.assetSets ?? []) checkId(set.id, `selection ${selection.id} assetSets`);
+    for (const field of selection.fields ?? []) {
+      checkId(field.id, `selection ${selection.id} fields`);
+      checkGlobal(entityFieldOwners, field.id, selection.id, 'per-record field');
+    }
+    for (const set of selection.assetSets ?? []) {
+      checkId(set.id, `selection ${selection.id} assetSets`);
+      checkGlobal(assetSetOwners, set.id, selection.id, 'asset-set');
+    }
     if (selection.exact !== undefined && (selection.min !== undefined || selection.max !== undefined)) {
       issues.push({ severity: 'error', code: 'contract.count_conflict', message: `Selection "${selection.id}" mixes exact with min/max.` });
     }
@@ -63,7 +88,10 @@ export function validateContractJson(contract) {
       issues.push({ severity: 'error', code: 'contract.count_conflict', message: `Selection "${selection.id}" has min greater than max.` });
     }
   }
-  for (const set of contract.assetSets ?? []) checkId(set.id, 'assetSets');
+  for (const set of contract.assetSets ?? []) {
+    checkId(set.id, 'assetSets');
+    checkGlobal(assetSetOwners, set.id, 'the production level', 'asset-set');
+  }
   return issues;
 }
 

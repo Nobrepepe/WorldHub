@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { domainError } from './errors.js';
 import { nowIso, inTransaction } from './database-service.js';
 import { recordActivity } from './activity-service.js';
-import { syncEntityIndex, removeFromIndex, syncRelationshipIndex } from './search-service.js';
+import { syncEntityIndex, syncDocumentIndex, syncAssetIndex, removeFromIndex, syncRelationshipIndex } from './search-service.js';
 import { slugify } from './paths.js';
 import { assetDisplayUrl } from './asset-service.js';
 
@@ -411,13 +411,30 @@ export function listTags(library) {
 export function setSubjectTags(library, subjectType, subjectId, tagNames) {
   const db = library.db;
   inTransaction(db, () => {
+    const before = tagsFor(library, subjectType, subjectId).map((tag) => tag.name).sort().join('\n');
     db.prepare('DELETE FROM taggings WHERE subject_type = ? AND subject_id = ?').run(subjectType, subjectId);
     const insert = db.prepare('INSERT OR IGNORE INTO taggings (tag_id, subject_type, subject_id) VALUES (?, ?, ?)');
     for (const name of tagNames) {
       const tag = ensureTag(library, name);
       insert.run(tag.id, subjectType, subjectId);
     }
-    if (subjectType === 'entity') syncEntityIndex(library, subjectId);
+    const after = tagsFor(library, subjectType, subjectId).map((tag) => tag.name).sort().join('\n');
+    const changed = before !== after;
+
+    if (subjectType === 'entity') {
+      if (changed) {
+        // Entity tags are published at a claimed revision, so a tag
+        // change is a meaningful canonical change.
+        db.prepare('UPDATE entities SET revision = revision + 1, updated_at = ? WHERE id = ?').run(nowIso(), subjectId);
+      }
+      syncEntityIndex(library, subjectId);
+    } else if (subjectType === 'document') {
+      if (changed) db.prepare('UPDATE documents SET updated_at = ? WHERE id = ?').run(nowIso(), subjectId);
+      syncDocumentIndex(library, subjectId);
+    } else if (subjectType === 'asset') {
+      if (changed) db.prepare('UPDATE assets SET updated_at = ? WHERE id = ?').run(nowIso(), subjectId);
+      syncAssetIndex(library, subjectId);
+    }
   });
   return tagsFor(library, subjectType, subjectId);
 }

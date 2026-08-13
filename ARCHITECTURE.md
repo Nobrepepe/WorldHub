@@ -63,8 +63,12 @@ All stored paths are normalized forward-slash paths relative to the library root
 
 - Markdown, manifests, settings, and publication pointers are written atomically: temp sibling → fsync → rename. Temp files carry a `.worldhub-tmp-` prefix, are ignored by loaders, and are cleaned when stale.
 - Original blobs are immutable once written; replacement creates a new version row pointing at a new blob.
-- Publications assemble in `tmp/`, are verified there (schema, checksums, references), then move into their immutable directory with a single rename; `current.json` changes only after that succeeds.
+- Publications assemble in `tmp/`, are verified there (schema, checksums, references), then move into their immutable directory with a single rename. The database rows are recorded next, and `current.json` is replaced atomically as the very last step — so the pointer only ever names a fully recorded publication. If the pointer write itself fails, the rows are compensated away and the unreferenced directory removed.
 - Restores extract to a temporary sibling, revalidate, then swap directories; the previous library is kept aside.
+
+### Database/filesystem coupling
+
+SQLite rollback cannot undo filesystem changes, so operations that touch both are ordered to fail safe: file writes are atomic (temp → rename) and happen such that an interruption leaves a *detectable* state, never a silently wrong one. A document whose row update failed after its file write is flagged as externally changed on next load (checksum disagreement) and routed through the conflict flow; a rendition whose rows and files diverge is found by the Integrity center and regenerated deterministically. Original blobs are immutable, so they can never be half-written into an inconsistent state — a partial import simply leaves an unreferenced file that the blob audit reports.
 
 ## Dependency direction
 

@@ -81,7 +81,7 @@ export function syncRelationshipIndex(library, id) {
     FROM relationships r JOIN entities s ON s.id = r.source_id JOIN entities t ON t.id = r.target_id
     WHERE r.id = ?
   `).get(id);
-  if (!row) return;
+  if (!row || row.status === 'archived') return;
   const title = `${row.source_name} — ${row.label || row.rel_type} — ${row.target_name}`;
   const body = [row.rel_type, row.label, row.inverse_label, row.description].filter(Boolean).join('\n');
   db.prepare('INSERT INTO search_index (subject_type, subject_id, facet, title, body) VALUES (?, ?, ?, ?, ?)')
@@ -124,9 +124,10 @@ function toFtsQuery(text) {
 
 /**
  * Universal search. Returns grouped results with the matched facet and
- * a snippet explaining why each result matched.
+ * a snippet explaining why each result matched. Filters: kind (types),
+ * world, tag, asset role, lifecycle status, and modified date.
  */
-export function searchLibrary(library, { query, types = null, worldId = null, limit = 60 }) {
+export function searchLibrary(library, { query, types = null, worldId = null, tagId = null, role = null, status = null, modifiedAfter = null, limit = 60 }) {
   const db = library.db;
   const fts = toFtsQuery(query);
   if (!fts) return { groups: [] };
@@ -148,12 +149,20 @@ export function searchLibrary(library, { query, types = null, worldId = null, li
     if (!best.has(key)) best.set(key, row);
   }
 
+  const hasTag = db.prepare('SELECT 1 FROM taggings WHERE subject_type = ? AND subject_id = ? AND tag_id = ?');
   const results = [];
   for (const row of best.values()) {
     const enriched = enrich(db, row);
     if (!enriched) continue;
     if (types && !types.includes(enriched.group)) continue;
-    if (worldId && enriched.worldId && enriched.worldId !== worldId && enriched.subjectId !== worldId) continue;
+    if (worldId && enriched.worldId !== worldId && enriched.subjectId !== worldId) continue;
+    if (status && enriched.status !== status) continue;
+    if (role && !(enriched.group === 'asset' && enriched.roles?.includes(role))) continue;
+    if (tagId) {
+      const taggable = { world: 'entity', character: 'entity', entry: 'entity', document: 'document', asset: 'asset' }[enriched.group];
+      if (!taggable || !hasTag.get(taggable, enriched.subjectId, tagId)) continue;
+    }
+    if (modifiedAfter && (!enriched.updatedAt || enriched.updatedAt < modifiedAfter)) continue;
     results.push(enriched);
     if (results.length >= limit) break;
   }
@@ -167,6 +176,15 @@ export function searchLibrary(library, { query, types = null, worldId = null, li
   return { groups };
 }
 
+/** The world a document or asset belongs to, through its links. */
+function worldOfLinks(db, links) {
+  for (const link of links) {
+    if (link.type === 'world') return link.id;
+    if (link.world_id) return link.world_id;
+  }
+  return null;
+}
+
 function enrich(db, row) {
   const base = {
     subjectType: row.subject_type,
@@ -176,23 +194,39 @@ function enrich(db, row) {
     title: row.title,
   };
   if (row.subject_type === 'entity') {
-    const entity = db.prepare('SELECT type, name, status, world_id FROM entities WHERE id = ?').get(row.subject_id);
+    const entity = db.prepare('SELECT type, name, status, world_id, updated_at FROM entities WHERE id = ?').get(row.subject_id);
     if (!entity) return null;
     const group = entity.type === 'world' ? 'world' : entity.type === 'character' ? 'character' : 'entry';
-    return { ...base, group, title: entity.name, entityType: entity.type, status: entity.status, worldId: entity.world_id, href: hrefFor(entity.type, row.subject_id) };
+    return { ...base, group, title: entity.name, entityType: entity.type, status: entity.status, worldId: entity.world_id, updatedAt: entity.updated_at, href: hrefFor(entity.type, row.subject_id) };
   }
   if (row.subject_type === 'document') {
-    const doc = db.prepare('SELECT title, status FROM documents WHERE id = ?').get(row.subject_id);
+    const doc = db.prepare('SELECT title, status, updated_at FROM documents WHERE id = ?').get(row.subject_id);
     if (!doc) return null;
-    return { ...base, group: 'document', title: doc.title, status: doc.status, worldId: null, href: `/document/${row.subject_id}` };
+    const links = db.prepare(`
+      SELECT e.id, e.type, e.world_id FROM document_links l JOIN entities e ON e.id = l.entity_id
+      WHERE l.document_id = ? ORDER BY l.position
+    `).all(row.subject_id);
+    return { ...base, group: 'document', title: doc.title, status: doc.status, worldId: worldOfLinks(db, links), updatedAt: doc.updated_at, href: `/document/${row.subject_id}` };
   }
   if (row.subject_type === 'asset') {
-    const asset = db.prepare('SELECT title, kind, status FROM assets WHERE id = ?').get(row.subject_id);
+    const asset = db.prepare('SELECT title, kind, status, updated_at FROM assets WHERE id = ?').get(row.subject_id);
     if (!asset) return null;
-    return { ...base, group: 'asset', title: asset.title, kind: asset.kind, status: asset.status, worldId: null, href: `/asset/${row.subject_id}` };
+    const links = db.prepare(`
+      SELECT e.id, e.type, e.world_id FROM asset_links l JOIN entities e ON e.id = l.entity_id
+      WHERE l.asset_id = ? ORDER BY l.position
+    `).all(row.subject_id);
+    const roles = db.prepare('SELECT DISTINCT role FROM asset_links WHERE asset_id = ?').all(row.subject_id).map((r) => r.role);
+    return { ...base, group: 'asset', title: asset.title, kind: asset.kind, status: asset.status, roles, worldId: worldOfLinks(db, links), updatedAt: asset.updated_at, href: `/asset/${row.subject_id}` };
   }
   if (row.subject_type === 'relationship') {
-    return { ...base, group: 'relationship', worldId: null, href: '/relationships' };
+    const rel = db.prepare(`
+      SELECT r.status, r.updated_at, s.world_id AS sw, s.type AS st, s.id AS sid, t.world_id AS tw, t.type AS tt, t.id AS tid
+      FROM relationships r JOIN entities s ON s.id = r.source_id JOIN entities t ON t.id = r.target_id
+      WHERE r.id = ?
+    `).get(row.subject_id);
+    if (!rel) return null;
+    const worldId = rel.st === 'world' ? rel.sid : rel.tt === 'world' ? rel.tid : (rel.sw ?? rel.tw);
+    return { ...base, group: 'relationship', status: rel.status, worldId, updatedAt: rel.updated_at, href: '/relationships' };
   }
   return null;
 }
