@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, session, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installIpc } from './ipc/registry.js';
@@ -126,6 +126,8 @@ function createMainWindow() {
   // errors to stderr, so the whole shell can be smoke-tested headlessly.
   if (process.env.WORLDHUB_DEV_ROUTES) {
     const routes = process.env.WORLDHUB_DEV_ROUTES.split(',');
+    const size = /^(\d+)x(\d+)$/.exec(process.env.WORLDHUB_DEV_SIZE ?? '');
+    if (size) win.setSize(Number(size[1]), Number(size[2]));
     win.webContents.on('console-message', (event) => {
       if (event.level === 'error' || event.level === 'warning') {
         process.stderr.write(`[renderer:${event.level}] ${event.message}\n`);
@@ -160,9 +162,32 @@ function createMainWindow() {
   win.on('move', persistBounds);
   win.on('close', persistBounds);
 
+  // Unsaved editor content is flushed before the window closes: the
+  // renderer gets one chance to save, then the close proceeds.
+  let flushedBeforeClose = false;
+  win.on('close', (event) => {
+    if (flushedBeforeClose || win.webContents.isDestroyed()) return;
+    event.preventDefault();
+    const proceed = () => {
+      flushedBeforeClose = true;
+      if (!win.isDestroyed()) win.close();
+    };
+    const timeout = setTimeout(proceed, 3000);
+    win.webContents.send('worldhub:event', 'app.flush-before-close', {});
+    ipcMainOnceFlushed(() => {
+      clearTimeout(timeout);
+      proceed();
+    });
+  });
+
   win.on('closed', () => {
     if (appContext.mainWindow === win) appContext.mainWindow = null;
   });
+}
+
+/** One-shot listener used by the pre-close flush handshake. */
+function ipcMainOnceFlushed(callback) {
+  ipcMain.once('worldhub:flushed', () => callback());
 }
 
 let quitting = false;

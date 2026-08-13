@@ -17,4 +17,9 @@ contextBridge.exposeInMainWorld('worldhub', {
     ipcRenderer.on('worldhub:event', wrapped);
     return () => ipcRenderer.removeListener('worldhub:event', wrapped);
   },
+
+  /** Signal that pre-close flushing finished. */
+  confirmFlushed() {
+    ipcRenderer.send('worldhub:flushed');
+  },
 });

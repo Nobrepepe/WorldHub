@@ -66,6 +66,10 @@ async function boot() {
     } else if (name === 'library.closed') {
       update({ library: null });
       renderShell();
+    } else if (name === 'app.flush-before-close') {
+      flushDirty()
+        .catch(() => { /* the save error was already surfaced */ })
+        .finally(() => window.worldhub.confirmFlushed());
     }
   });
 

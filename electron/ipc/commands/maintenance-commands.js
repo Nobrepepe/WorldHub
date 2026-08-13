@@ -27,6 +27,12 @@ register('settings.update', {
     for (const [key, value] of Object.entries(patch)) {
       if (value !== undefined) setSetting(ctx.library.db, key, value);
     }
+    if (patch.renditionQuality !== undefined) {
+      // The default quality applies to the built-in recipes; custom
+      // per-recipe tuning still wins afterwards via recipe.update.
+      ctx.library.db.prepare(`UPDATE rendition_recipes SET quality = ? WHERE builtin = 1 AND format != 'original'`)
+        .run(patch.renditionQuality);
+    }
     return getAllSettings(ctx.library.db);
   },
 });
