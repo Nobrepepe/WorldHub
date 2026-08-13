@@ -1,0 +1,91 @@
+import { getState, update, flushDirty } from './store.js';
+
+/**
+ * Hash routing without a framework. Routes are registered as patterns
+ * like '/world/:id'. Navigation flushes any unsaved editor first.
+ */
+
+const routes = [];
+
+export function registerRoute(pattern, view) {
+  const segments = pattern.split('/').filter(Boolean);
+  routes.push({ pattern, segments, view });
+}
+
+export function matchRoute(hashPath) {
+  const parts = hashPath.split('/').filter(Boolean);
+  for (const route of routes) {
+    if (route.segments.length !== parts.length) continue;
+    const params = {};
+    let matched = true;
+    for (let i = 0; i < parts.length; i++) {
+      const seg = route.segments[i];
+      if (seg.startsWith(':')) params[seg.slice(1)] = decodeURIComponent(parts[i]);
+      else if (seg !== parts[i]) { matched = false; break; }
+    }
+    if (matched) return { route, params };
+  }
+  return null;
+}
+
+export function currentPath() {
+  const hash = location.hash.replace(/^#/, '');
+  return hash || '/home';
+}
+
+export async function navigate(path) {
+  await flushDirty();
+  if (`#${path}` === location.hash) {
+    await renderCurrent();
+  } else {
+    location.hash = path;
+  }
+}
+
+let renderHost = null;
+let onAfterRender = null;
+
+export function installRouter(host, afterRender) {
+  renderHost = host;
+  onAfterRender = afterRender;
+  window.addEventListener('hashchange', () => { renderCurrent().catch(console.error); });
+}
+
+export async function renderCurrent() {
+  if (!renderHost) return;
+  const path = currentPath();
+  const match = matchRoute(path);
+  const state = getState();
+
+  if (!state.library) {
+    update({ route: { name: 'chooser', params: {} } });
+    onAfterRender?.();
+    return;
+  }
+
+  const target = match ?? matchRoute('/home');
+  update({ route: { name: target.route.pattern, params: target.params, path } });
+
+  const view = document.createElement('div');
+  view.className = 'view';
+  try {
+    const content = await target.route.view(target.params);
+    view.append(content);
+  } catch (err) {
+    console.error(err);
+    const fail = document.createElement('p');
+    fail.className = 'state-bad';
+    fail.textContent = err?.message ?? 'This screen could not be loaded.';
+    view.append(fail);
+  }
+  renderHost.replaceChildren(view);
+  renderHost.parentElement?.scrollTo?.(0, 0);
+  onAfterRender?.();
+
+  // Restore keyboard focus to the main document for accessibility.
+  const heading = view.querySelector('h1');
+  if (heading) {
+    heading.setAttribute('tabindex', '-1');
+    heading.focus({ preventScroll: true });
+  }
+}

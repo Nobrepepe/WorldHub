@@ -1,0 +1,242 @@
+/* Application shell: text navigation rail plus a naturally scrolling
+   main document. The rail collapses into an accessible drawer at
+   narrow widths. */
+
+.app {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 13.5rem 1fr;
+}
+
+.app.chooser-mode {
+  grid-template-columns: 1fr;
+}
+
+/* ---- navigation rail ---- */
+
+.nav-rail {
+  display: flex;
+  flex-direction: column;
+  padding: 1.6rem 0 1.2rem 1.6rem;
+  overflow-y: auto;
+  border-right: 1px solid transparent;
+}
+
+.nav-brand {
+  font-family: var(--serif);
+  font-size: calc(1.35rem * var(--text-scale));
+  margin-bottom: 0.1rem;
+}
+
+.nav-library {
+  font-size: calc(0.75rem * var(--text-scale));
+  color: var(--muted-2);
+  margin-bottom: 1.6rem;
+  overflow-wrap: break-word;
+  padding-right: 1rem;
+}
+
+.nav-group { margin-bottom: 1.35rem; }
+.nav-group > .eyebrow { display: block; margin-bottom: 0.4rem; }
+
+.nav-link {
+  display: block;
+  padding: 0.22rem 0;
+  color: var(--text-dim);
+  font-size: calc(0.9rem * var(--text-scale));
+}
+.nav-link:hover { color: var(--text); }
+.nav-link.active {
+  color: var(--text);
+  font-weight: 600;
+}
+.nav-link .nav-count {
+  color: var(--muted-2);
+  font-weight: 400;
+  margin-left: 0.4rem;
+  font-size: calc(0.78rem * var(--text-scale));
+}
+.nav-link.attention .nav-count { color: var(--accent); }
+
+.nav-foot {
+  margin-top: auto;
+  padding-top: 1rem;
+  font-size: calc(0.78rem * var(--text-scale));
+  color: var(--muted-2);
+  padding-right: 1rem;
+}
+
+.nav-toggle { display: none; }
+
+/* ---- main document ---- */
+
+.main {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2.2rem 3rem 4rem 2.6rem;
+  scroll-padding-top: 2rem;
+  position: relative;
+}
+
+.main-inner {
+  max-width: 68rem;
+}
+.main-inner.wide { max-width: 100rem; }
+
+.view { animation: view-in calc(180ms * var(--motion, 1)) ease; }
+@keyframes view-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---- page header pattern ---- */
+
+.page-head { margin-bottom: 1.8rem; }
+.page-head .eyebrow { display: block; margin-bottom: 0.35rem; }
+.page-head h1 { margin-bottom: 0.4rem; }
+.page-lede { color: var(--text-dim); max-width: 44rem; }
+
+/* ---- text tabs with active underline ---- */
+
+.tabs {
+  display: flex;
+  gap: 1.4rem;
+  margin: 1.4rem 0 1.6rem;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.tab {
+  padding: 0.35rem 0 0.5rem;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-size: calc(0.9rem * var(--text-scale));
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* ---- toolbars: quiet filter rows ---- */
+
+.toolbar {
+  display: flex;
+  gap: 1.5rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-bottom: 1.4rem;
+}
+.toolbar .field { margin-bottom: 0; min-width: 9rem; flex: 0 1 auto; }
+.toolbar .grow { flex: 1 1 12rem; }
+
+/* ---- dense rows (inbox, search results): quiet bottom hairline ---- */
+
+.row-list { list-style: none; }
+.row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.55rem 0.3rem;
+  border-bottom: 1px solid rgba(244, 236, 225, 0.07);
+  cursor: pointer;
+}
+.row:hover, .row.selected { background: var(--bg-hover); }
+.row:focus-visible { outline-offset: -1px; }
+.row .row-main { flex: 1 1 auto; min-width: 0; }
+.row .row-title { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .row-sub { font-size: calc(0.78rem * var(--text-scale)); color: var(--muted-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .row-side { flex: 0 0 auto; font-size: calc(0.8rem * var(--text-scale)); color: var(--muted); text-align: right; }
+.row-thumb {
+  flex: 0 0 auto;
+  width: 3rem; height: 3rem;
+  object-fit: cover;
+}
+.row-thumb.no-art { width: 3rem; height: 3rem; min-height: 0; font-size: 0.5rem; }
+
+/* ---- overlays ---- */
+
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 8, 7, 0.72);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+  animation: view-in calc(140ms * var(--motion, 1)) ease;
+}
+.overlay {
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+  width: min(42rem, calc(100vw - 3rem));
+  max-height: calc(100vh - 5rem);
+  overflow-y: auto;
+  padding: 1.8rem 2.2rem 2rem;
+}
+.overlay.overlay-wide { width: min(64rem, calc(100vw - 3rem)); }
+.overlay h2 { margin-bottom: 0.9rem; }
+.overlay-actions {
+  display: flex;
+  gap: 1.8rem;
+  margin-top: 1.6rem;
+  align-items: baseline;
+}
+
+/* ---- toasts ---- */
+
+.toasts {
+  position: fixed;
+  bottom: 1.4rem;
+  right: 1.8rem;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 26rem;
+}
+.toast {
+  background: var(--bg-2);
+  border-left: 2px solid var(--muted-2);
+  padding: 0.7rem 1.1rem;
+  font-size: calc(0.85rem * var(--text-scale));
+  animation: view-in calc(160ms * var(--motion, 1)) ease;
+}
+.toast.toast-error { border-left-color: var(--bad); }
+.toast.toast-good { border-left-color: var(--good); }
+
+/* ---- save state ---- */
+
+.save-state { font-size: calc(0.8rem * var(--text-scale)); color: var(--muted-2); }
+.save-state.saving { color: var(--muted); }
+.save-state.saved { color: var(--good); }
+.save-state.error { color: var(--bad); }
+
+/* ---- narrow widths: collapse the rail into a drawer ---- */
+
+@media (max-width: 980px) {
+  .app { grid-template-columns: 1fr; }
+  .nav-rail {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 15rem;
+    background: var(--bg-2);
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform calc(160ms * var(--motion, 1)) ease;
+  }
+  .nav-rail.open { transform: translateX(0); }
+  .nav-toggle {
+    display: block;
+    position: fixed;
+    top: 0.9rem;
+    left: 1rem;
+    z-index: 70;
+    color: var(--muted);
+    font-size: calc(0.8rem * var(--text-scale));
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--bg);
+    padding: 0.25rem 0.5rem;
+  }
+  .main { padding: 3.2rem 1.4rem 3rem; }
+}
