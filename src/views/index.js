@@ -6,6 +6,7 @@ import { renderCharacters, renderCharacterDetail } from './characters.js';
 import { renderEntries, renderEntryDetail } from './entries.js';
 import { renderRelationships } from './relationships.js';
 import { renderDocuments, renderDocumentDetail } from './documents.js';
+import { renderAssets, renderAssetDetail } from './assets.js';
 
 /** Route registration for every view. Views are added per domain. */
 export function registerAllViews() {
@@ -20,4 +21,6 @@ export function registerAllViews() {
   registerRoute('/relationships', renderRelationships);
   registerRoute('/documents', renderDocuments);
   registerRoute('/document/:id', renderDocumentDetail);
+  registerRoute('/assets', renderAssets);
+  registerRoute('/asset/:id', renderAssetDetail);
 }
