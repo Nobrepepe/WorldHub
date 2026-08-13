@@ -1,0 +1,176 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { makeTestLibrary } from './helpers.mjs';
+import {
+  createEntity, getEntity, updateEntity, listEntities, entityUsage, archiveEntity, restoreEntity,
+  createRelationship, updateRelationship, listRelationships,
+  ensureTag, setSubjectTags, tagsFor, listTags,
+} from '../electron/services/entity-service.js';
+import { searchLibrary, rebuildSearchIndex } from '../electron/services/search-service.js';
+
+test('entity UUID stays stable through rename and slug stays editable', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const world = createEntity(library, { type: 'world', name: 'Aster Reach' });
+  assert.equal(world.slug, 'aster-reach');
+  assert.equal(world.revision, 1);
+
+  const renamed = updateEntity(library, world.id, { name: 'Aster Expanse' });
+  assert.equal(renamed.id, world.id);
+  assert.equal(renamed.name, 'Aster Expanse');
+  assert.equal(renamed.slug, 'aster-reach', 'slug does not change on rename');
+  assert.ok(renamed.revision > world.revision);
+
+  const reslugged = updateEntity(library, world.id, { slug: 'aster' });
+  assert.equal(reslugged.slug, 'aster');
+
+  const other = createEntity(library, { type: 'world', name: 'Aster' });
+  assert.equal(other.slug, 'aster-2', 'slug collision resolved within namespace');
+  assert.throws(() => updateEntity(library, other.id, { slug: 'aster' }), /already uses the slug/);
+});
+
+test('worlds and characters associate; profiles persist', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const world = createEntity(library, { type: 'world', name: 'Vel' });
+  const nao = createEntity(library, { type: 'character', name: 'Nao', worldId: world.id });
+  assert.equal(nao.world.id, world.id);
+
+  updateEntity(library, nao.id, {
+    aliases: ['The Listener', 'Nao of the Vale'],
+    profile: { role: 'Wandering archivist', ageText: 'Appears twenty-six', appearance: 'Slight, silver-eyed.' },
+  });
+  const loaded = getEntity(library, nao.id);
+  assert.deepEqual(loaded.aliases, ['The Listener', 'Nao of the Vale']);
+  assert.equal(loaded.profile.role, 'Wandering archivist');
+  assert.equal(loaded.profile.age_text, 'Appears twenty-six');
+
+  updateEntity(library, world.id, { profile: { tagline: 'A drowned frontier', genre: 'Mythic fantasy' } });
+  assert.equal(getEntity(library, world.id).profile.tagline, 'A drowned frontier');
+
+  assert.throws(
+    () => createEntity(library, { type: 'character', name: 'Lost', worldId: nao.id }),
+    /world no longer exists/,
+    'a character cannot use a non-world as its world',
+  );
+
+  const chars = listEntities(library, { type: 'character', worldId: world.id });
+  assert.deepEqual(chars.map((c) => c.name), ['Nao']);
+});
+
+test('relationships keep direction and inverse label', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const a = createEntity(library, { type: 'character', name: 'Ari' });
+  const b = createEntity(library, { type: 'character', name: 'Bram' });
+  const rel = createRelationship(library, {
+    sourceId: a.id, targetId: b.id, relType: 'mentor',
+    label: 'mentor of', inverseLabel: 'student of', description: 'Since the flood year.',
+  });
+  assert.equal(rel.sourceId, a.id);
+  assert.equal(rel.targetId, b.id);
+  assert.equal(rel.inverseLabel, 'student of');
+
+  const updated = updateRelationship(library, rel.id, { description: 'Since the flood year, uneasily.' });
+  assert.match(updated.description, /uneasily/);
+
+  const forA = listRelationships(library, { entityId: a.id });
+  assert.equal(forA.length, 1);
+  assert.equal(forA[0].sourceName, 'Ari');
+  assert.equal(forA[0].targetName, 'Bram');
+
+  assert.throws(() => createRelationship(library, { sourceId: a.id, targetId: a.id, relType: 'twin' }), /cannot relate to itself/);
+});
+
+test('tags apply to entities and are reusable', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const a = createEntity(library, { type: 'character', name: 'Ari' });
+  const b = createEntity(library, { type: 'character', name: 'Bram' });
+  setSubjectTags(library, 'entity', a.id, ['protagonist', 'sky court']);
+  setSubjectTags(library, 'entity', b.id, ['sky court']);
+
+  assert.deepEqual(tagsFor(library, 'entity', a.id).map((x) => x.name).sort(), ['protagonist', 'sky court']);
+  const all = listTags(library);
+  const skyCourt = all.find((x) => x.name === 'sky court');
+  assert.equal(skyCourt.uses, 2, 'the same tag row is reused');
+
+  const tagged = listEntities(library, { type: 'character', tagId: skyCourt.id });
+  assert.equal(tagged.length, 2);
+
+  const again = ensureTag(library, 'sky court');
+  assert.equal(again.id, skyCourt.id);
+});
+
+test('archive shows usage first and archived entities can be restored', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const world = createEntity(library, { type: 'world', name: 'Vel' });
+  const nao = createEntity(library, { type: 'character', name: 'Nao', worldId: world.id });
+  createRelationship(library, { sourceId: nao.id, targetId: world.id, relType: 'born in' });
+
+  const usage = entityUsage(library, world.id);
+  assert.equal(usage.children.length, 1);
+  assert.equal(usage.relationships.length, 1);
+
+  archiveEntity(library, world.id);
+  assert.equal(getEntity(library, world.id).status, 'archived');
+  assert.equal(listEntities(library, { type: 'world' }).length, 0, 'archived hidden from default lists');
+  assert.equal(listEntities(library, { type: 'world', status: 'archived' }).length, 1);
+
+  restoreEntity(library, world.id);
+  assert.equal(getEntity(library, world.id).status, 'draft');
+});
+
+test('full-text search finds names, aliases, profiles, and explains matches', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const world = createEntity(library, { type: 'world', name: 'Aster Reach' });
+  const nao = createEntity(library, { type: 'character', name: 'Nao', worldId: world.id });
+  updateEntity(library, nao.id, {
+    aliases: ['The Listener'],
+    profile: { personality: 'Quietly relentless, keeps every promise.' },
+  });
+
+  let result = searchLibrary(library, { query: 'listener' });
+  assert.equal(result.groups[0].group, 'character');
+  assert.equal(result.groups[0].items[0].title, 'Nao');
+
+  result = searchLibrary(library, { query: 'relentless' });
+  assert.equal(result.groups[0].items[0].facet, 'profile');
+  assert.match(result.groups[0].items[0].snippet, /\[relentless\]/i, 'snippet marks why it matched');
+
+  result = searchLibrary(library, { query: 'aster' });
+  assert.equal(result.groups[0].group, 'world');
+
+  // Prefix search as the user types.
+  result = searchLibrary(library, { query: 'listen' });
+  assert.equal(result.groups[0].items[0].title, 'Nao');
+
+  // Archived entities drop out of the index.
+  archiveEntity(library, nao.id);
+  result = searchLibrary(library, { query: 'listener' });
+  assert.equal(result.groups.length, 0);
+});
+
+test('rebuild search index restores drifted state', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const world = createEntity(library, { type: 'world', name: 'Vel Marches' });
+  createEntity(library, { type: 'character', name: 'Bram', worldId: world.id });
+
+  // Simulate drift: wipe the index behind the service's back.
+  library.db.prepare('DELETE FROM search_index').run();
+  assert.equal(searchLibrary(library, { query: 'bram' }).groups.length, 0);
+
+  const counts = rebuildSearchIndex(library);
+  assert.equal(counts.entities, 2);
+  assert.equal(searchLibrary(library, { query: 'bram' }).groups[0].items[0].title, 'Bram');
+});

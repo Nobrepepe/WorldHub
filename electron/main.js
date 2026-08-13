@@ -54,13 +54,26 @@ function onReady() {
   installMediaProtocol(appContext);
   registerAllCommands();
   installIpc(appContext);
-  createMainWindow();
+  openDevLibraryIfRequested().finally(createMainWindow);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 
   logInfo('main', `World Hub ${app.getVersion()} ready.`);
+}
+
+/** Development aid: auto-open a library path so the shell can be exercised without dialogs. */
+async function openDevLibraryIfRequested() {
+  const devPath = process.env.WORLDHUB_DEV_LIBRARY;
+  if (!devPath) return;
+  try {
+    const { openLibrary } = await import('./services/library-service.js');
+    const result = await openLibrary(appContext, devPath, {});
+    if (result.locked) logError('main.dev-library', new Error('dev library is locked'));
+  } catch (err) {
+    logError('main.dev-library', err);
+  }
 }
 
 function hardenSession(ses) {
@@ -105,6 +118,24 @@ function createMainWindow() {
 
   win.loadFile(path.join(projectRoot, 'index.html'));
   win.once('ready-to-show', () => win.show());
+
+  // Development aid: visit a list of routes and log renderer console
+  // errors to stderr, so the whole shell can be smoke-tested headlessly.
+  if (process.env.WORLDHUB_DEV_ROUTES) {
+    const routes = process.env.WORLDHUB_DEV_ROUTES.split(',');
+    win.webContents.on('console-message', (event) => {
+      if (event.level === 'error' || event.level === 'warning') {
+        process.stderr.write(`[renderer:${event.level}] ${event.message}\n`);
+      }
+    });
+    win.webContents.once('did-finish-load', async () => {
+      for (const route of routes) {
+        await win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(route)}; undefined`);
+        await new Promise((resolve) => setTimeout(resolve, 700));
+      }
+      process.stderr.write('[dev-routes] done\n');
+    });
+  }
 
   // No window may navigate away from the app or open external windows.
   win.webContents.on('will-navigate', (event) => event.preventDefault());

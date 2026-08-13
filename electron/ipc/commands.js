@@ -4,6 +4,7 @@
  */
 import './commands/app-commands.js';
 import './commands/library-commands.js';
+import './commands/entity-commands.js';
 
 export function registerAllCommands() {
   // Importing the modules above performs registration; this function

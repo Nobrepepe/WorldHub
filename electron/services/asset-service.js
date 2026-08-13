@@ -32,6 +32,21 @@ export function installMediaResolvers(library) {
   });
 }
 
+/**
+ * Displayable worldhub:// URL for an asset's current version, or null.
+ * Views use this for gallery and preferred-art thumbnails.
+ */
+export function assetDisplayUrl(db, assetId) {
+  if (!assetId) return null;
+  const row = db.prepare(`
+    SELECT b.hash FROM assets a
+    JOIN asset_versions v ON v.id = a.current_version_id
+    JOIN blobs b ON b.hash = v.blob_hash
+    WHERE a.id = ? AND a.status = 'active'
+  `).get(assetId);
+  return row ? `worldhub://media/blob/${row.hash}` : null;
+}
+
 function guessInboxMime(row) {
   const ext = row.staging_path.split('.').pop()?.toLowerCase();
   const map = {

@@ -1,13 +1,193 @@
-import { el } from '../ui/dom.js';
+import { el, clear, debounce } from '../ui/dom.js';
+import { call, callSafe } from '../ipc.js';
 import { openOverlay } from '../ui/overlay.js';
+import { navigate } from '../router.js';
+import { selectInput } from '../ui/forms.js';
 
-/** Interim palette; the full universal search arrives with canon. */
+const GROUP_LABELS = {
+  world: 'Worlds',
+  character: 'Characters',
+  entry: 'Other entries',
+  document: 'Documents',
+  asset: 'Assets',
+  relationship: 'Relationships',
+};
+
+/**
+ * Universal search: searches as the user types, groups results, shows
+ * why each result matched, and opens on Enter.
+ */
+
+function buildSearchList({ onOpen }) {
+  const listHost = el('div', { role: 'listbox', 'aria-label': 'Search results' });
+  let flat = [];
+  let active = -1;
+
+  const renderResults = (groups, query) => {
+    clear(listHost);
+    flat = [];
+    active = -1;
+    if (!query.trim()) {
+      listHost.append(el('p', { class: 'empty-state', style: { padding: '0.5rem 0' } }, 'Type to search names, aliases, profiles, documents, artwork, and relationships.'));
+      return;
+    }
+    if (groups.length === 0) {
+      listHost.append(el('p', { class: 'empty-state', style: { padding: '0.5rem 0' } }, `Nothing in the library matches “${query}”.`));
+      return;
+    }
+    for (const group of groups) {
+      listHost.append(el('div', { class: 'section', style: { margin: '0.9rem 0 0.2rem' } },
+        el('span', { class: 'eyebrow' }, GROUP_LABELS[group.group] ?? group.group)));
+      const list = el('ul', { class: 'row-list' });
+      for (const item of group.items) {
+        const index = flat.length;
+        flat.push(item);
+        list.append(el('li', {
+          class: 'row',
+          role: 'option',
+          'aria-selected': 'false',
+          dataset: { index: String(index) },
+          onclick: () => onOpen(item),
+        },
+          el('div', { class: 'row-main' },
+            el('div', { class: 'row-title' }, item.title),
+            el('div', { class: 'row-sub' }, matchReason(item)),
+          ),
+          item.status ? el('div', { class: 'row-side' }, item.status) : null,
+        ));
+      }
+      listHost.append(list);
+    }
+    if (flat.length > 0) setActive(0);
+  };
+
+  const setActive = (index) => {
+    active = index;
+    for (const node of listHost.querySelectorAll('.row')) {
+      const isActive = Number(node.dataset.index) === index;
+      node.classList.toggle('selected', isActive);
+      node.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      if (isActive) node.scrollIntoView({ block: 'nearest' });
+    }
+  };
+
+  return {
+    listHost,
+    renderResults,
+    onKeydown: (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (flat.length) setActive(Math.min(active + 1, flat.length - 1)); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); if (flat.length) setActive(Math.max(active - 1, 0)); }
+      else if (e.key === 'Enter' && active >= 0 && flat[active]) { e.preventDefault(); onOpen(flat[active]); }
+    },
+  };
+}
+
+function matchReason(item) {
+  const facetNames = {
+    name: 'matched the name or an alias',
+    profile: 'matched the profile',
+    document: 'matched the text',
+    asset: 'matched the label, files, or tags',
+    relationship: 'matched the relationship',
+  };
+  const why = facetNames[item.facet] ?? 'matched';
+  return item.snippet ? `${why}: ${item.snippet}` : why;
+}
+
+/** Ctrl/Cmd+K palette. */
 export function openSearchPalette() {
-  openOverlay((close) => el('div', {},
-    el('h2', {}, 'Search'),
-    el('p', { class: 'dim' }, 'Search opens once the library holds canon content.'),
-    el('div', { class: 'overlay-actions' },
-      el('button', { class: 'btn', onclick: () => close() }, 'Close'),
+  openOverlay((close) => {
+    const open = (item) => { close(); navigate(item.href); };
+    const { listHost, renderResults, onKeydown } = buildSearchList({ onOpen: open });
+
+    const run = debounce(async (query) => {
+      if (!query.trim()) { renderResults([], query); return; }
+      const result = await callSafe('search.query', { query });
+      renderResults(result?.groups ?? [], query);
+    }, 140);
+
+    const input = el('input', {
+      type: 'search',
+      placeholder: 'Search the whole library…',
+      'aria-label': 'Search the library',
+      oninput: (e) => run(e.target.value),
+      onkeydown: onKeydown,
+    });
+
+    renderResults([], '');
+    return el('div', {},
+      el('div', { class: 'field' }, input),
+      el('div', { style: { maxHeight: '55vh', overflowY: 'auto' } }, listHost),
+    );
+  }, { label: 'Search', wide: true });
+}
+
+/** The /search destination with filters. */
+export async function renderSearchPage() {
+  const worlds = await call('entity.list', { type: 'world' });
+  const filters = { query: '', type: '', worldId: '' };
+
+  const host = el('div', {},
+    el('header', { class: 'page-head' },
+      el('span', { class: 'eyebrow' }, 'Library'),
+      el('h1', {}, 'Search'),
     ),
-  ), { label: 'Search' });
+  );
+
+  const open = (item) => navigate(item.href);
+  const { listHost, renderResults, onKeydown } = buildSearchList({ onOpen: open });
+
+  const run = debounce(async () => {
+    if (!filters.query.trim()) { renderResults([], filters.query); return; }
+    const result = await callSafe('search.query', {
+      query: filters.query,
+      types: filters.type ? [filters.type] : undefined,
+      worldId: filters.worldId || undefined,
+    });
+    renderResults(result?.groups ?? [], filters.query);
+  }, 140);
+
+  const input = el('input', {
+    type: 'search',
+    placeholder: 'Search names, aliases, profiles, documents, artwork…',
+    'aria-label': 'Search the library',
+    oninput: (e) => { filters.query = e.target.value; run(); },
+    onkeydown: onKeydown,
+  });
+
+  host.append(
+    el('div', { class: 'toolbar' },
+      el('div', { class: 'field grow' }, input),
+      el('div', { class: 'field' },
+        el('span', { class: 'eyebrow' }, 'Kind'),
+        selectInput({
+          value: '',
+          options: [
+            { value: '', label: 'Everything' },
+            { value: 'world', label: 'Worlds' },
+            { value: 'character', label: 'Characters' },
+            { value: 'entry', label: 'Other entries' },
+            { value: 'document', label: 'Documents' },
+            { value: 'asset', label: 'Assets' },
+            { value: 'relationship', label: 'Relationships' },
+          ],
+          onChange: (value) => { filters.type = value; run(); },
+          ariaLabel: 'Filter by kind',
+        }),
+      ),
+      el('div', { class: 'field' },
+        el('span', { class: 'eyebrow' }, 'World'),
+        selectInput({
+          value: '',
+          options: [{ value: '', label: 'All worlds' }, ...worlds.map((w) => ({ value: w.id, label: w.name }))],
+          onChange: (value) => { filters.worldId = value; run(); },
+          ariaLabel: 'Filter by world',
+        }),
+      ),
+    ),
+    listHost,
+  );
+  renderResults([], '');
+  queueMicrotask(() => input.focus());
+  return host;
 }
