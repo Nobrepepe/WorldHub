@@ -1,0 +1,137 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "worldhub://schemas/application-contract-1",
+  "title": "World Hub Application Contract, version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "contractVersion", "appType", "name", "supportedProtocolVersions"],
+  "properties": {
+    "format": { "const": "world-hub-application-contract" },
+    "contractVersion": { "const": 1 },
+    "appType": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{1,80}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "description": { "type": "string", "maxLength": 4000 },
+    "supportedProtocolVersions": {
+      "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 1 }
+    },
+    "productionFields": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/fieldDef" } },
+    "entitySelections": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/entitySelection" } },
+    "assetSets": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/assetSet" } },
+    "documents": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["none", "linked", "selected"] }
+      },
+      "required": ["mode"]
+    },
+    "requiredRecipes": {
+      "type": "array", "maxItems": 20, "items": { "type": "string", "pattern": "^[a-z0-9_]{1,60}$" }
+    }
+  },
+  "$defs": {
+    "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,60}$" },
+    "fieldDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "type": {
+          "enum": ["shortText", "multilineText", "markdown", "integer", "number", "boolean", "enum", "color", "entityRef", "assetRef", "list"]
+        },
+        "required": { "type": "boolean" },
+        "hint": { "type": "string", "maxLength": 500 },
+        "default": {},
+        "minLength": { "type": "integer", "minimum": 0 },
+        "maxLength": { "type": "integer", "minimum": 1 },
+        "pattern": { "type": "string", "maxLength": 300 },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 },
+        "options": {
+          "type": "array", "minItems": 1, "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "label"],
+            "properties": {
+              "value": { "type": "string", "maxLength": 100 },
+              "label": { "type": "string", "maxLength": 200 }
+            }
+          }
+        },
+        "entityTypes": {
+          "type": "array", "minItems": 1,
+          "items": { "enum": ["world", "character", "location", "group", "species", "object", "event", "lore"] }
+        },
+        "assetKinds": {
+          "type": "array", "minItems": 1,
+          "items": { "enum": ["image", "audio", "markdown", "attachment"] }
+        },
+        "assetRoles": { "type": "array", "items": { "type": "string", "maxLength": 100 } },
+        "item": { "$ref": "#/$defs/fieldDef" },
+        "fields": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/$defs/fieldDef" } },
+        "minItems": { "type": "integer", "minimum": 0 },
+        "maxItems": { "type": "integer", "minimum": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "enum" } } },
+          "then": { "required": ["options"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "entityRef" } } },
+          "then": { "required": ["entityTypes"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "list" } } },
+          "then": {
+            "anyOf": [{ "required": ["item"] }, { "required": ["fields"] }]
+          }
+        }
+      ]
+    },
+    "entitySelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "entityTypes"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "entityTypes": {
+          "type": "array", "minItems": 1,
+          "items": { "enum": ["world", "character", "location", "group", "species", "object", "event", "lore"] }
+        },
+        "min": { "type": "integer", "minimum": 0 },
+        "max": { "type": "integer", "minimum": 1 },
+        "exact": { "type": "integer", "minimum": 1 },
+        "ordered": { "type": "boolean" },
+        "hint": { "type": "string", "maxLength": 500 },
+        "fields": { "type": "array", "maxItems": 50, "items": { "$ref": "#/$defs/fieldDef" } },
+        "assetSets": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/assetSet" } }
+      }
+    },
+    "assetSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "kinds": {
+          "type": "array", "minItems": 1,
+          "items": { "enum": ["image", "audio", "markdown", "attachment"] }
+        },
+        "roles": { "type": "array", "items": { "type": "string", "maxLength": 100 } },
+        "recipes": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9_]{1,60}$" } },
+        "min": { "type": "integer", "minimum": 0 },
+        "max": { "type": "integer", "minimum": 1 },
+        "exact": { "type": "integer", "minimum": 1 },
+        "hint": { "type": "string", "maxLength": 500 },
+        "itemFields": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/fieldDef" } }
+      }
+    }
+  }
+}

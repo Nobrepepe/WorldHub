@@ -90,7 +90,11 @@ export async function createLibrary(appContext, parentDirectory, name) {
     db.close();
   }
   logInfo('library', `Created library "${name}" at ${rootAbs}`);
-  return openLibrary(appContext, rootAbs, {});
+  const opened = await openLibrary(appContext, rootAbs, {});
+  // Every new library ships the demonstration contract.
+  const { installExampleContract } = await import('./contract-service.js');
+  installExampleContract(appContext.library);
+  return opened;
 }
 
 /**

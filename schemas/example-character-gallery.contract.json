@@ -1,0 +1,64 @@
+{
+  "format": "world-hub-application-contract",
+  "contractVersion": 1,
+  "appType": "example.character-gallery",
+  "name": "Example Character Gallery",
+  "description": "A small demonstration contract: one world, one to twelve characters, one portrait each, and an optional caption. It exists to show how contracts work and to exercise automated tests.",
+  "supportedProtocolVersions": [1],
+  "productionFields": [
+    {
+      "id": "gallery_title",
+      "label": "Gallery title",
+      "type": "shortText",
+      "required": true,
+      "maxLength": 120
+    },
+    {
+      "id": "intro",
+      "label": "Introduction",
+      "type": "multilineText",
+      "required": false,
+      "maxLength": 2000,
+      "hint": "Shown above the gallery."
+    }
+  ],
+  "entitySelections": [
+    {
+      "id": "world",
+      "label": "World",
+      "entityTypes": ["world"],
+      "exact": 1,
+      "hint": "The world this gallery presents."
+    },
+    {
+      "id": "cast",
+      "label": "Characters",
+      "entityTypes": ["character"],
+      "min": 1,
+      "max": 12,
+      "ordered": true,
+      "fields": [
+        {
+          "id": "caption",
+          "label": "Caption",
+          "type": "shortText",
+          "required": false,
+          "maxLength": 200,
+          "hint": "An optional line under the portrait."
+        }
+      ],
+      "assetSets": [
+        {
+          "id": "portrait",
+          "label": "Portrait",
+          "kinds": ["image"],
+          "roles": ["character.portrait"],
+          "recipes": ["card_3x4", "thumbnail_square"],
+          "exact": 1
+        }
+      ]
+    }
+  ],
+  "documents": { "mode": "linked" },
+  "requiredRecipes": ["card_3x4", "thumbnail_square"]
+}
