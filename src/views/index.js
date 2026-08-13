@@ -10,6 +10,7 @@ import { renderAssets, renderAssetDetail } from './assets.js';
 import { renderInbox } from './inbox.js';
 import { renderContracts, renderContractDetail } from './contracts.js';
 import { renderProductions, renderProductionDetail } from './productions.js';
+import { renderPublishPreview, renderPublicationDetail } from './publications.js';
 
 /** Route registration for every view. Views are added per domain. */
 export function registerAllViews() {
@@ -31,4 +32,6 @@ export function registerAllViews() {
   registerRoute('/contract/:id', renderContractDetail);
   registerRoute('/productions', renderProductions);
   registerRoute('/production/:id', renderProductionDetail);
+  registerRoute('/production/:id/publish', renderPublishPreview);
+  registerRoute('/publication/:id', renderPublicationDetail);
 }

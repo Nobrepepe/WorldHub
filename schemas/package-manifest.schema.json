@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "worldhub://schemas/package-manifest-1",
+  "title": "World Hub Package manifest, protocol 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format", "protocolVersion", "publicationId", "production", "applicationType",
+    "contract", "sourceLibraryId", "publishedAt", "entities", "sections", "complete"
+  ],
+  "properties": {
+    "format": { "const": "world-hub-package" },
+    "protocolVersion": { "const": 1 },
+    "publicationId": { "type": "string", "pattern": "^[0-9a-f-]{36}$" },
+    "production": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "slug", "revision"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[0-9a-f-]{36}$" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "revision": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "applicationType": { "type": "string" },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[0-9a-f-]{36}$" },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "sourceLibraryId": { "type": "string", "pattern": "^[0-9a-f-]{36}$" },
+    "publishedAt": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T.*Z$" },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "revision"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[0-9a-f-]{36}$" },
+          "type": { "type": "string" },
+          "revision": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "sections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog", "production", "documents", "assets", "checksums"],
+      "properties": {
+        "catalog": { "type": "string" },
+        "production": { "type": "string" },
+        "documents": { "type": "string" },
+        "assets": { "type": "string" },
+        "checksums": { "type": "string" }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entities": { "type": "integer" },
+        "documents": { "type": "integer" },
+        "assets": { "type": "integer" },
+        "files": { "type": "integer" }
+      }
+    },
+    "complete": { "type": "boolean" }
+  }
+}

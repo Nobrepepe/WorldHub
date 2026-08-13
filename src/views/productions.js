@@ -164,6 +164,34 @@ export async function renderProductionDetail({ id }) {
     }, { readOnly }));
   }
 
+  /* documents chosen explicitly, when the contract asks for it */
+  let documentsSection = null;
+  if (contract.documents?.mode === 'selected') {
+    documentsSection = el('div', { class: 'section', id: 'dest-documents' },
+      el('span', { class: 'eyebrow' }, 'Documents in this snapshot'),
+      el('p', { class: 'section-note' }, 'This contract includes only the documents you choose here.'),
+    );
+    const chosenDocs = new Set(Array.isArray(production.values.__documents__) ? production.values.__documents__ : []);
+    const allDocs = await call('document.list', {});
+    if (allDocs.length === 0) {
+      documentsSection.append(el('p', { class: 'section-note' }, 'The library has no documents yet.'));
+    }
+    for (const doc of allDocs) {
+      documentsSection.append(el('label', { style: { display: 'flex', gap: '0.5rem', alignItems: 'baseline', padding: '0.2rem 0' } },
+        el('input', {
+          type: 'checkbox', checked: chosenDocs.has(doc.id), disabled: readOnly,
+          onchange: async (e) => {
+            if (e.target.checked) chosenDocs.add(doc.id);
+            else chosenDocs.delete(doc.id);
+            await callSafe('production.setValue', { id, scope: 'production', field: '__documents__', value: [...chosenDocs] });
+          },
+        }),
+        el('span', {}, doc.title),
+        el('span', { class: 'quiet' }, doc.links.map((l) => l.name).join(', ')),
+      ));
+    }
+  }
+
   /* entity selections */
   const selectionSections = (contract.entitySelections ?? []).map((selection) =>
     selectionSection(production, selection, { readOnly, reload }));
@@ -250,7 +278,7 @@ export async function renderProductionDetail({ id }) {
     });
   }
 
-  host.append(validationHost, fieldsSection, ...selectionSections, ...productionSets, publicationsSection, actions, nameField ?? '');
+  host.append(validationHost, fieldsSection, documentsSection ?? '', ...selectionSections, ...productionSets, publicationsSection, actions, nameField ?? '');
   runValidation();
   return host;
 }
