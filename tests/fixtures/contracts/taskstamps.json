@@ -1,0 +1,92 @@
+{
+  "format": "world-hub-application-contract",
+  "contractVersion": 1,
+  "appType": "task-stamps.stamp-set",
+  "name": "Task Stamps — Stamp Set",
+  "description": "Worlds and characters for the Task Stamps habit tracker. Each character brings a portrait, an optional signature sound, and exactly fifteen ordered stamp images earned by completing tasks. Characters should belong to the selected worlds.",
+  "supportedProtocolVersions": [1],
+  "productionFields": [],
+  "entitySelections": [
+    {
+      "id": "stamp_worlds",
+      "label": "Worlds",
+      "entityTypes": ["world"],
+      "min": 1,
+      "ordered": true,
+      "hint": "The worlds the stamp characters come from. Each needs a cover for the world picker.",
+      "fields": [],
+      "assetSets": [
+        {
+          "id": "world_cover",
+          "label": "World cover",
+          "kinds": ["image"],
+          "roles": ["world.cover"],
+          "recipes": ["landscape_16x9", "thumbnail_square"],
+          "exact": 1,
+          "hint": "Shown in the world library and pickers."
+        }
+      ]
+    },
+    {
+      "id": "stamp_characters",
+      "label": "Characters",
+      "entityTypes": ["character"],
+      "min": 1,
+      "ordered": true,
+      "hint": "Characters that hand out stamps. A character is only usable once all fifteen stamps are present.",
+      "fields": [],
+      "assetSets": [
+        {
+          "id": "portrait",
+          "label": "Portrait",
+          "kinds": ["image"],
+          "roles": ["character.portrait"],
+          "recipes": ["square", "thumbnail_square"],
+          "exact": 1,
+          "hint": "Shown in the character library and on assignment cards."
+        },
+        {
+          "id": "stamps",
+          "label": "Stamps — fifteen, in order",
+          "kinds": ["image"],
+          "roles": ["character.collectible"],
+          "recipes": ["square"],
+          "exact": 15,
+          "hint": "The fifteen stamp images in earning order: slot 1 is the first stamp a task completion can award."
+        },
+        {
+          "id": "default_sound",
+          "label": "Signature sound",
+          "kinds": ["audio"],
+          "roles": ["audio.character_cue"],
+          "min": 0,
+          "max": 1,
+          "hint": "Optional. Played when a stamp without its own sound is placed."
+        },
+        {
+          "id": "stamp_sounds",
+          "label": "Per-stamp sounds",
+          "kinds": ["audio"],
+          "roles": ["audio.voice_line"],
+          "min": 0,
+          "max": 15,
+          "hint": "Optional sounds for individual stamps. Set each sound's stamp number.",
+          "itemFields": [
+            {
+              "id": "stamp_number",
+              "label": "Stamp number",
+              "type": "integer",
+              "required": true,
+              "min": 1,
+              "max": 15,
+              "hint": "Which stamp (1–15) this sound belongs to."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "assetSets": [],
+  "documents": { "mode": "none" },
+  "requiredRecipes": ["landscape_16x9", "square", "thumbnail_square"]
+}

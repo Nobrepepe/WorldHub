@@ -39,6 +39,35 @@ function sha256File(absPath) {
 /* ---------------- snapshot resolution ---------------- */
 
 /**
+ * Walk contract-defined values and collect every entityRef and assetRef
+ * they hold, recursing through list fields. Generic: works for any
+ * contract, so packages stay self-contained without app-specific code.
+ */
+export function collectValueReferences(defs, values, found = { entityIds: [], assetRefs: [] }) {
+  for (const def of defs ?? []) {
+    collectFromValue(def, values?.[def.id], found);
+  }
+  return found;
+}
+
+function collectFromValue(def, value, found) {
+  if (value === undefined || value === null) return;
+  if (def.type === 'entityRef' && typeof value === 'string') {
+    found.entityIds.push(value);
+  } else if (def.type === 'assetRef' && typeof value === 'string') {
+    found.assetRefs.push({ assetId: value, recipes: (def.recipes && def.recipes.length > 0) ? def.recipes : ['original'] });
+  } else if (def.type === 'list' && Array.isArray(value)) {
+    for (const entry of value) {
+      if (def.fields) {
+        for (const sub of def.fields) collectFromValue(sub, entry?.[sub.id], found);
+      } else if (def.item) {
+        collectFromValue(def.item, entry, found);
+      }
+    }
+  }
+}
+
+/**
  * Resolve everything a publication will contain, at exact revisions
  * and exact asset versions. Pure read; used by preview and publish.
  */
@@ -53,6 +82,31 @@ export function resolveSnapshot(library, productionId) {
   for (const selection of contract.entitySelections ?? []) {
     for (const entity of production.selections[selection.id] ?? []) entityIds.add(entity.id);
   }
+
+  /* references held in contract-defined values also ship in the package */
+  const valueRefs = { entityIds: [], assetRefs: [] };
+  collectValueReferences(contract.productionFields, production.values, valueRefs);
+  for (const selection of contract.entitySelections ?? []) {
+    for (const entity of production.selections[selection.id] ?? []) {
+      collectValueReferences(selection.fields, production.entityValues[entity.id], valueRefs);
+    }
+    for (const set of selection.assetSets ?? []) {
+      for (const entity of production.selections[selection.id] ?? []) {
+        for (const item of production.assetSets[setKey(set.id, entity.id)] ?? []) {
+          collectValueReferences(set.itemFields, item.values, valueRefs);
+        }
+      }
+    }
+  }
+  for (const set of contract.assetSets ?? []) {
+    for (const item of production.assetSets[setKey(set.id)] ?? []) {
+      collectValueReferences(set.itemFields, item.values, valueRefs);
+    }
+  }
+  for (const refId of valueRefs.entityIds) {
+    if (db.prepare('SELECT id FROM entities WHERE id = ?').get(refId)) entityIds.add(refId);
+  }
+
   for (const id of [...entityIds]) {
     const row = db.prepare('SELECT world_id FROM entities WHERE id = ?').get(id);
     if (row?.world_id) entityIds.add(row.world_id);
@@ -140,6 +194,42 @@ export function resolveSnapshot(library, productionId) {
     }
   }
   for (const set of contract.assetSets ?? []) addSet(set, '', null);
+
+  /* assets referenced by contract-defined values (packs, relic art, …) */
+  const coveredPairs = new Set(assetItems.flatMap((item) => item.recipes.map((recipeId) => `${item.asset.id}:${recipeId}`)));
+  const fieldAssetRecipes = new Map();
+  for (const ref of valueRefs.assetRefs) {
+    for (const recipeId of ref.recipes) {
+      const pairKey = `${ref.assetId}:${recipeId}`;
+      if (coveredPairs.has(pairKey)) continue;
+      coveredPairs.add(pairKey);
+      if (!fieldAssetRecipes.has(ref.assetId)) fieldAssetRecipes.set(ref.assetId, new Set());
+      fieldAssetRecipes.get(ref.assetId).add(recipeId);
+    }
+  }
+  for (const [assetId, recipeSet] of fieldAssetRecipes) {
+    const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
+    if (!asset || !asset.current_version_id) {
+      throw domainError('publish.asset_missing', 'A value-referenced asset no longer exists or has no version.');
+    }
+    const version = db.prepare(`
+      SELECT v.*, b.hash, b.mime, b.size, b.width, b.height, b.path AS blob_path, b.ext
+      FROM asset_versions v JOIN blobs b ON b.hash = v.blob_hash
+      WHERE v.id = ?
+    `).get(asset.current_version_id);
+    const roles = db.prepare('SELECT DISTINCT role FROM asset_links WHERE asset_id = ? ORDER BY role').all(assetId).map((r) => r.role);
+    assetItems.push({
+      setId: 'fields',
+      roles,
+      recipes: [...recipeSet].sort(),
+      entityId: null,
+      position: 0,
+      values: {},
+      asset,
+      version,
+    });
+  }
+
   assetItems.sort((a, b) =>
     a.setId.localeCompare(b.setId) || String(a.entityId).localeCompare(String(b.entityId)) || a.position - b.position);
 
@@ -674,6 +764,37 @@ function verifyAssembledPackage(workAbs, assembly) {
       if (ref && !packagedAssetIds.has(ref)) {
         throw domainError('publish.profile_asset_dangling', 'A character profile references an asset outside the package.');
       }
+    }
+  }
+
+  /* reference-typed production values resolve within the package */
+  const packagedContract = JSON.parse(fs.readFileSync(path.join(workAbs, 'production', 'contract.json'), 'utf8'));
+  const packagedContent = JSON.parse(fs.readFileSync(path.join(workAbs, 'production', 'content.json'), 'utf8'));
+  const contentRefs = { entityIds: [], assetRefs: [] };
+  collectValueReferences(packagedContract.productionFields, packagedContent.values, contentRefs);
+  for (const selection of packagedContract.entitySelections ?? []) {
+    for (const selectedId of packagedContent.selections?.[selection.id] ?? []) {
+      collectValueReferences(selection.fields, packagedContent.entityValues?.[selectedId], contentRefs);
+      for (const set of selection.assetSets ?? []) {
+        for (const item of packagedContent.assetSets?.[`${set.id}:${selectedId}`] ?? []) {
+          collectValueReferences(set.itemFields, item.values, contentRefs);
+        }
+      }
+    }
+  }
+  for (const set of packagedContract.assetSets ?? []) {
+    for (const item of packagedContent.assetSets?.[set.id] ?? []) {
+      collectValueReferences(set.itemFields, item.values, contentRefs);
+    }
+  }
+  for (const refId of contentRefs.entityIds) {
+    if (!entityIds.has(refId)) {
+      throw domainError('publish.value_entity_dangling', 'A production value references a record outside the package.');
+    }
+  }
+  for (const ref of contentRefs.assetRefs) {
+    if (!packagedAssetIds.has(ref.assetId)) {
+      throw domainError('publish.value_asset_dangling', 'A production value references an asset outside the package.');
     }
   }
 

@@ -1,0 +1,157 @@
+{
+  "format": "world-hub-application-contract",
+  "contractVersion": 1,
+  "appType": "chat-bot.cast",
+  "name": "ChatBot — Cast",
+  "description": "Worlds, locations, and characters for the roleplay chat app. Canonical profiles carry appearance, personality, biography, and voice; the fields here carry only AI-specific guidance that should never pollute canon. Linked Markdown documents become the lore available to prompt building.",
+  "supportedProtocolVersions": [1],
+  "productionFields": [
+    {
+      "id": "cast_notes",
+      "label": "Cast notes",
+      "type": "multilineText",
+      "required": false,
+      "maxLength": 2000,
+      "hint": "Optional notes about this cast, shown only in the app's content screen."
+    }
+  ],
+  "entitySelections": [
+    {
+      "id": "cb_worlds",
+      "label": "Worlds",
+      "entityTypes": ["world"],
+      "min": 1,
+      "ordered": true,
+      "hint": "The worlds conversations can be set in. Genre, tone, and setting come from the canonical world profile.",
+      "fields": [
+        {
+          "id": "world_style_guide",
+          "label": "AI style guide",
+          "type": "multilineText",
+          "required": false,
+          "maxLength": 4000,
+          "hint": "Writing-style instructions for the AI narrator in this world. AI-only; not part of canon."
+        }
+      ],
+      "assetSets": [
+        {
+          "id": "cb_world_cover",
+          "label": "World cover",
+          "kinds": ["image"],
+          "roles": ["world.cover"],
+          "recipes": ["landscape_16x9"],
+          "min": 0,
+          "max": 1
+        },
+        {
+          "id": "session_background",
+          "label": "Session background",
+          "kinds": ["image"],
+          "roles": ["world.background"],
+          "recipes": ["landscape_16x9"],
+          "min": 0,
+          "max": 1,
+          "hint": "Default backdrop behind conversations in this world."
+        }
+      ]
+    },
+    {
+      "id": "cast",
+      "label": "Characters",
+      "entityTypes": ["character"],
+      "min": 1,
+      "ordered": true,
+      "hint": "Characters available for conversations. Appearance, personality, backstory, and voice come from the canonical profile.",
+      "fields": [
+        {
+          "id": "char_behavior_rules",
+          "label": "Behavior rules",
+          "type": "multilineText",
+          "required": false,
+          "maxLength": 4000,
+          "hint": "Hard rules the AI must follow when playing this character. AI-only."
+        },
+        {
+          "id": "char_ai_instructions",
+          "label": "AI instructions",
+          "type": "multilineText",
+          "required": false,
+          "maxLength": 4000,
+          "hint": "Optional extra guidance for the model (pacing, quirks, taboos). AI-only."
+        },
+        {
+          "id": "char_relationship_to_user",
+          "label": "Relationship to the user",
+          "type": "shortText",
+          "required": false,
+          "maxLength": 300,
+          "hint": "Starting stance toward the user's persona, e.g. \"childhood friend\"."
+        }
+      ],
+      "assetSets": [
+        {
+          "id": "tile",
+          "label": "Tile image",
+          "kinds": ["image"],
+          "roles": ["character.identity_tile"],
+          "recipes": ["square"],
+          "min": 0,
+          "max": 1,
+          "hint": "Small identifying tile for pickers and lists."
+        },
+        {
+          "id": "sprites",
+          "label": "Expression sprites",
+          "kinds": ["image"],
+          "roles": ["character.expression"],
+          "recipes": ["portrait_9x16"],
+          "min": 0,
+          "max": 12,
+          "hint": "One image per expression. The neutral expression is used as the default sprite.",
+          "itemFields": [
+            {
+              "id": "expression",
+              "label": "Expression",
+              "type": "shortText",
+              "required": true,
+              "maxLength": 40,
+              "hint": "neutral, happy, sad, angry, surprised, …"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "places",
+      "label": "Locations",
+      "entityTypes": ["location"],
+      "min": 0,
+      "ordered": true,
+      "hint": "Optional canonical locations scenes can take place in.",
+      "fields": [
+        {
+          "id": "loc_mood_tags",
+          "label": "Mood tags",
+          "type": "shortText",
+          "required": false,
+          "maxLength": 200,
+          "hint": "Comma-separated moods, e.g. \"cozy, rainy, quiet\"."
+        }
+      ],
+      "assetSets": [
+        {
+          "id": "location_background",
+          "label": "Location background",
+          "kinds": ["image"],
+          "roles": ["location.background"],
+          "recipes": ["landscape_16x9"],
+          "min": 0,
+          "max": 1
+        }
+      ]
+    }
+  ],
+  "assetSets": [],
+  "documents": { "mode": "linked" },
+  "requiredRecipes": ["landscape_16x9", "square", "portrait_9x16"]
+}

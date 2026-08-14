@@ -151,6 +151,69 @@ test('packages are self-contained: actual roles, no dangling profile or document
   assert.ok(!relationships.some((rel) => rel.type === 'exile'), 'archived relationship excluded');
 });
 
+test('assets and entities referenced by contract-defined values ship in the package', async (t) => {
+  const { library, root, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const { createContract } = await import('../electron/services/contract-service.js');
+
+  const world = createEntity(library, { type: 'world', name: 'Vel' });
+  const nao = createEntity(library, { type: 'character', name: 'Nao', worldId: world.id });
+  const patron = createEntity(library, { type: 'character', name: 'Patron', worldId: world.id });
+  const png = await sharp({ create: { width: 60, height: 40, channels: 3, background: { r: 20, g: 40, b: 60 } } }).png().toBuffer();
+  const packArt = await importAsset(library, { buffer: png, filename: 'pack.png', title: 'Pack art' });
+  const relicPng = await sharp({ create: { width: 30, height: 30, channels: 3, background: { r: 90, g: 10, b: 10 } } }).png().toBuffer();
+  const relicArt = await importAsset(library, { buffer: relicPng, filename: 'relic.png', title: 'Relic art' });
+
+  const contract = createContract(library, {
+    format: 'world-hub-application-contract',
+    contractVersion: 1,
+    appType: 'test.value-refs',
+    name: 'Value reference test',
+    supportedProtocolVersions: [1],
+    productionFields: [
+      { id: 'cover_art', label: 'Cover art', type: 'assetRef', assetKinds: ['image'], recipes: ['thumbnail_square'] },
+      { id: 'sponsor', label: 'Sponsor', type: 'entityRef', entityTypes: ['character'] },
+      {
+        id: 'relics', label: 'Relics', type: 'list',
+        fields: [
+          { id: 'relic_name', label: 'Name', type: 'shortText', required: true },
+          { id: 'relic_art', label: 'Art', type: 'assetRef', assetKinds: ['image'] },
+        ],
+      },
+    ],
+    entitySelections: [
+      { id: 'cast', label: 'Cast', entityTypes: ['character'], min: 1, max: 5 },
+    ],
+    documents: { mode: 'none' },
+  });
+
+  const production = createProduction(library, { name: 'Refs', contractId: contract.contractId });
+  setSelection(library, production.id, 'cast', [nao.id]);
+  setProductionValue(library, production.id, { scope: 'production', field: 'cover_art', value: packArt.id });
+  setProductionValue(library, production.id, { scope: 'production', field: 'sponsor', value: patron.id });
+  setProductionValue(library, production.id, {
+    scope: 'production', field: 'relics',
+    value: [{ relic_name: 'Ember', relic_art: relicArt.id }],
+  });
+
+  const publication = await publishProduction(library, production.id);
+  const packageDir = path.join(root, ...publication.directory.split('/'));
+  const read = (rel) => JSON.parse(fs.readFileSync(path.join(packageDir, ...rel.split('/')), 'utf8'));
+
+  const index = read('assets/index.json');
+  const cover = index.find((entry) => entry.assetId === packArt.id);
+  assert.ok(cover, 'assetRef value is packaged');
+  assert.equal(cover.recipeId, 'thumbnail_square', 'assetRef recipes hint is honored');
+  assert.ok(fs.existsSync(path.join(packageDir, ...cover.path.split('/'))));
+  const relic = index.find((entry) => entry.assetId === relicArt.id);
+  assert.ok(relic, 'assetRef nested inside a list group is packaged');
+  assert.equal(relic.recipeId, 'original', 'default recipe for assetRef is original');
+
+  const entities = read('catalog/entities.json');
+  assert.ok(entities.some((entity) => entity.id === patron.id), 'entityRef value ships in the catalog');
+  assert.deepEqual(verifyPublication(library, publication.id), { ok: true, problems: [] });
+});
+
 test('package JSON generation is deterministic', async (t) => {
   const { library, cleanup } = await makeTestLibrary();
   t.after(cleanup);

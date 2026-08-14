@@ -1,0 +1,371 @@
+{
+  "format": "world-hub-application-contract",
+  "contractVersion": 1,
+  "appType": "hero-collector.content-pack",
+  "name": "Hero Collector — Content Pack",
+  "description": "A complete authored content pack: worlds with campaigns, headquarters, and archives; characters with acquisition setup, equipment lines, and skins; factions; the expedition library; and the crisis library. Mechanical definitions (balance, formulas, tier profiles, recipes) stay bundled with the game — enum fields here reference those bundled vocabularies.",
+  "supportedProtocolVersions": [1],
+  "productionFields": [
+    {
+      "id": "hc_factions",
+      "label": "Factions",
+      "type": "list",
+      "required": false,
+      "maxItems": 40,
+      "hint": "Team-synergy factions characters can belong to.",
+      "fields": [
+        { "id": "faction_id", "label": "Faction id", "type": "shortText", "required": true, "maxLength": 60, "hint": "Stable lowercase id, e.g. faction_village_shadows. Character faction fields refer to this." },
+        { "id": "faction_name", "label": "Display name", "type": "shortText", "required": true, "maxLength": 80 },
+        { "id": "faction_explanation", "label": "Explanation", "type": "multilineText", "required": false, "maxLength": 400 },
+        { "id": "faction_bonus_2_bp", "label": "Bonus at 2 members (basis points)", "type": "integer", "required": false, "min": 0, "max": 10000 },
+        { "id": "faction_bonus_3_bp", "label": "Bonus at 3 members (basis points)", "type": "integer", "required": false, "min": 0, "max": 10000 }
+      ]
+    },
+    {
+      "id": "hc_expedition_requirements",
+      "label": "Expedition requirements",
+      "type": "list",
+      "required": false,
+      "maxItems": 100,
+      "fields": [
+        { "id": "expreq_id", "label": "Requirement id", "type": "shortText", "required": true, "maxLength": 60 },
+        { "id": "expreq_type", "label": "Type", "type": "shortText", "required": true, "maxLength": 60, "hint": "A requirement type the game understands, e.g. tag_count, archetype_count." },
+        { "id": "expreq_world", "label": "World id", "type": "entityRef", "entityTypes": ["world"], "required": false, "hint": "Leave empty for any world." },
+        { "id": "expreq_count", "label": "Count", "type": "integer", "required": false, "min": 1, "max": 10 },
+        { "id": "expreq_text", "label": "Requirement text", "type": "shortText", "required": true, "maxLength": 200 }
+      ]
+    },
+    {
+      "id": "hc_expedition_objectives",
+      "label": "Expedition optional objectives",
+      "type": "list",
+      "required": false,
+      "maxItems": 100,
+      "fields": [
+        { "id": "expobj_id", "label": "Objective id", "type": "shortText", "required": true, "maxLength": 60 },
+        { "id": "expobj_type", "label": "Type", "type": "shortText", "required": true, "maxLength": 60 },
+        { "id": "expobj_count", "label": "Count", "type": "integer", "required": false, "min": 1, "max": 10 },
+        { "id": "expobj_text", "label": "Objective text", "type": "shortText", "required": true, "maxLength": 200 }
+      ]
+    },
+    {
+      "id": "hc_expedition_rewards",
+      "label": "Expedition reward packages",
+      "type": "list",
+      "required": false,
+      "maxItems": 100,
+      "fields": [
+        { "id": "expreward_id", "label": "Package id", "type": "shortText", "required": true, "maxLength": 60 },
+        { "id": "expreward_name", "label": "Display name", "type": "shortText", "required": true, "maxLength": 80 },
+        { "id": "expreward_rare", "label": "Rare package", "type": "boolean", "required": false },
+        {
+          "id": "expreward_entries",
+          "label": "Entries",
+          "type": "list",
+          "required": true,
+          "minItems": 1,
+          "maxItems": 10,
+          "fields": [
+            { "id": "rentry_kind", "label": "Kind", "type": "enum", "required": true, "options": [
+              { "value": "resource", "label": "Resource" },
+              { "value": "material", "label": "Material" },
+              { "value": "component", "label": "Component" },
+              { "value": "shards", "label": "Character shards" },
+              { "value": "energy", "label": "Energy" }
+            ] },
+            { "id": "rentry_id", "label": "Target id", "type": "shortText", "required": false, "maxLength": 60, "hint": "Resource/material/component id from the bundled game vocabularies, or empty." },
+            { "id": "rentry_amount", "label": "Amount", "type": "integer", "required": true, "min": 1, "max": 100000 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hc_expedition_templates",
+      "label": "Expedition templates",
+      "type": "list",
+      "required": false,
+      "maxItems": 100,
+      "fields": [
+        { "id": "exptpl_id", "label": "Template id", "type": "shortText", "required": true, "maxLength": 60 },
+        { "id": "exptpl_world", "label": "World", "type": "entityRef", "entityTypes": ["world"], "required": false },
+        { "id": "exptpl_weight", "label": "Offer weight", "type": "integer", "required": false, "min": 1, "max": 100 },
+        { "id": "exptpl_party_size", "label": "Party size", "type": "integer", "required": true, "min": 1, "max": 4 },
+        { "id": "exptpl_durations", "label": "Durations (hours)", "type": "list", "required": false, "maxItems": 4, "item": { "id": "exptpl_duration", "label": "Hours", "type": "integer", "min": 1, "max": 72 } },
+        { "id": "exptpl_requirement_ids", "label": "Requirement ids", "type": "list", "required": false, "maxItems": 6, "item": { "id": "exptpl_req", "label": "Requirement id", "type": "shortText", "maxLength": 60 } },
+        { "id": "exptpl_requirement_count", "label": "Requirements drawn", "type": "integer", "required": false, "min": 0, "max": 6 },
+        { "id": "exptpl_optional_ids", "label": "Optional objective ids", "type": "list", "required": false, "maxItems": 6, "item": { "id": "exptpl_opt", "label": "Objective id", "type": "shortText", "maxLength": 60 } },
+        { "id": "exptpl_reward_package", "label": "Reward package id", "type": "shortText", "required": true, "maxLength": 60 },
+        { "id": "exptpl_power_ratio_bp", "label": "Recommended power (basis points)", "type": "integer", "required": false, "min": 1000, "max": 30000 },
+        { "id": "exptpl_titles", "label": "Offer titles", "type": "list", "required": false, "maxItems": 6, "item": { "id": "exptpl_title", "label": "Title", "type": "shortText", "maxLength": 120 } },
+        { "id": "exptpl_descriptions", "label": "Offer prose", "type": "list", "required": false, "maxItems": 6, "item": { "id": "exptpl_desc", "label": "Description", "type": "multilineText", "maxLength": 500 } }
+      ]
+    },
+    {
+      "id": "hc_crises",
+      "label": "Crisis definitions",
+      "type": "list",
+      "required": false,
+      "maxItems": 60,
+      "fields": [
+        { "id": "crisis_id", "label": "Crisis id", "type": "shortText", "required": true, "maxLength": 60 },
+        { "id": "crisis_world", "label": "World", "type": "entityRef", "entityTypes": ["world"], "required": true },
+        { "id": "crisis_name", "label": "Name", "type": "shortText", "required": true, "maxLength": 120 },
+        { "id": "crisis_opening", "label": "Opening description", "type": "multilineText", "required": false, "maxLength": 1000 },
+        { "id": "crisis_art", "label": "Artwork", "type": "assetRef", "required": false, "assetKinds": ["image"], "recipes": ["landscape_16x9"] },
+        { "id": "crisis_weight", "label": "Spawn weight", "type": "integer", "required": false, "min": 1, "max": 100 },
+        { "id": "crisis_min_cleared", "label": "Minimum cleared nodes", "type": "integer", "required": false, "min": 0, "max": 100 },
+        {
+          "id": "crisis_fronts",
+          "label": "Fronts",
+          "type": "list",
+          "required": true,
+          "minItems": 2,
+          "maxItems": 3,
+          "fields": [
+            { "id": "front_id", "label": "Front id", "type": "shortText", "required": true, "maxLength": 60 },
+            { "id": "front_name", "label": "Name", "type": "shortText", "required": true, "maxLength": 120 },
+            { "id": "front_description", "label": "Description", "type": "multilineText", "required": false, "maxLength": 500 },
+            { "id": "front_favored_tags", "label": "Favored tag ids", "type": "list", "required": false, "maxItems": 6, "item": { "id": "front_tag", "label": "Tag id", "type": "shortText", "maxLength": 60 } },
+            { "id": "front_power_local", "label": "Recommended power — local", "type": "integer", "required": false, "min": 0, "max": 100000 },
+            { "id": "front_power_major", "label": "Recommended power — major", "type": "integer", "required": false, "min": 0, "max": 100000 },
+            { "id": "front_power_world", "label": "Recommended power — world", "type": "integer", "required": false, "min": 0, "max": 100000 },
+            { "id": "front_struggle_text", "label": "Struggle text", "type": "multilineText", "required": false, "maxLength": 400 },
+            { "id": "front_success_text", "label": "Success text", "type": "multilineText", "required": false, "maxLength": 400 },
+            { "id": "front_excel_text", "label": "Excel text", "type": "multilineText", "required": false, "maxLength": 400 }
+          ]
+        },
+        {
+          "id": "crisis_consolation",
+          "label": "Consolation reward entries",
+          "type": "list",
+          "required": false,
+          "maxItems": 5,
+          "fields": [
+            { "id": "cons_kind", "label": "Kind", "type": "enum", "required": true, "options": [
+              { "value": "resource", "label": "Resource" },
+              { "value": "material", "label": "Material" },
+              { "value": "component", "label": "Component" },
+              { "value": "shards", "label": "Character shards" },
+              { "value": "energy", "label": "Energy" }
+            ] },
+            { "id": "cons_id", "label": "Target id", "type": "shortText", "required": false, "maxLength": 60 },
+            { "id": "cons_amount", "label": "Amount", "type": "integer", "required": true, "min": 1, "max": 100000 }
+          ]
+        },
+        {
+          "id": "crisis_cache_choices",
+          "label": "Cache choices",
+          "type": "list",
+          "required": false,
+          "maxItems": 6,
+          "fields": [
+            { "id": "cache_id", "label": "Cache id", "type": "shortText", "required": true, "maxLength": 60 },
+            { "id": "cache_name", "label": "Name", "type": "shortText", "required": true, "maxLength": 120 },
+            {
+              "id": "cache_entries",
+              "label": "Entries",
+              "type": "list",
+              "required": true,
+              "minItems": 1,
+              "maxItems": 5,
+              "fields": [
+                { "id": "centry_kind", "label": "Kind", "type": "enum", "required": true, "options": [
+                  { "value": "resource", "label": "Resource" },
+                  { "value": "material", "label": "Material" },
+                  { "value": "component", "label": "Component" },
+                  { "value": "shards", "label": "Character shards" },
+                  { "value": "energy", "label": "Energy" }
+                ] },
+                { "id": "centry_id", "label": "Target id", "type": "shortText", "required": false, "maxLength": 60 },
+                { "id": "centry_amount", "label": "Amount", "type": "integer", "required": true, "min": 1, "max": 100000 }
+              ]
+            }
+          ]
+        },
+        { "id": "crisis_boon_text", "label": "Boon description", "type": "multilineText", "required": false, "maxLength": 500 }
+      ]
+    }
+  ],
+  "entitySelections": [
+    {
+      "id": "hc_worlds",
+      "label": "Worlds",
+      "entityTypes": ["world"],
+      "min": 1,
+      "ordered": true,
+      "hint": "Playable worlds. Name, tagline, and description come from the canonical world profile.",
+      "fields": [
+        { "id": "hc_world_icon", "label": "Icon", "type": "shortText", "required": false, "maxLength": 8, "hint": "A single emoji or glyph." },
+        { "id": "hc_palette_primary", "label": "Palette — primary", "type": "color", "required": false },
+        { "id": "hc_palette_accent", "label": "Palette — accent", "type": "color", "required": false },
+        { "id": "hc_palette_dark", "label": "Palette — dark", "type": "color", "required": false },
+        { "id": "hc_world_display_order", "label": "Display order", "type": "integer", "required": false, "min": 0, "max": 99 },
+        { "id": "hc_asset_name", "label": "World asset — name", "type": "shortText", "required": false, "maxLength": 80, "hint": "The world-specific resource, e.g. \"Chakra\"." },
+        { "id": "hc_asset_description", "label": "World asset — description", "type": "shortText", "required": false, "maxLength": 300 },
+        { "id": "hc_asset_icon", "label": "World asset — icon", "type": "shortText", "required": false, "maxLength": 8 },
+        {
+          "id": "hc_chapter_titles",
+          "label": "Campaign chapter titles",
+          "type": "list",
+          "required": false,
+          "minItems": 3,
+          "maxItems": 3,
+          "item": { "id": "hc_chapter_title", "label": "Chapter title", "type": "shortText", "maxLength": 120 }
+        },
+        {
+          "id": "hc_campaign_nodes",
+          "label": "World campaign nodes",
+          "type": "list",
+          "required": true,
+          "minItems": 30,
+          "maxItems": 30,
+          "hint": "Thirty nodes: ten per chapter, in order.",
+          "fields": [
+            { "id": "node_name", "label": "Node name", "type": "shortText", "required": true, "maxLength": 120 },
+            { "id": "node_threshold", "label": "Power threshold", "type": "integer", "required": true, "min": 0, "max": 1000000 },
+            { "id": "node_family", "label": "Material family", "type": "enum", "required": true, "options": [
+              { "value": "metal", "label": "Metal" },
+              { "value": "fiber", "label": "Fiber" },
+              { "value": "mineral", "label": "Mineral" },
+              { "value": "compound", "label": "Compound" },
+              { "value": "mechanism", "label": "Mechanism" },
+              { "value": "essence", "label": "Essence" }
+            ] },
+            { "id": "node_grade", "label": "Material grade", "type": "enum", "required": true, "options": [
+              { "value": "basic", "label": "Basic" },
+              { "value": "improved", "label": "Improved" },
+              { "value": "advanced", "label": "Advanced" },
+              { "value": "superior", "label": "Superior" },
+              { "value": "masterwork", "label": "Masterwork" }
+            ] }
+          ]
+        },
+        {
+          "id": "hc_hq_facilities",
+          "label": "Headquarters facilities",
+          "type": "list",
+          "required": false,
+          "maxItems": 12,
+          "fields": [
+            { "id": "facility_id", "label": "Facility id", "type": "shortText", "required": true, "maxLength": 60 },
+            { "id": "facility_name", "label": "Name", "type": "shortText", "required": true, "maxLength": 120 },
+            { "id": "facility_description", "label": "Description", "type": "multilineText", "required": false, "maxLength": 400 },
+            { "id": "facility_art", "label": "Art", "type": "assetRef", "required": false, "assetKinds": ["image"], "recipes": ["square"] }
+          ]
+        },
+        { "id": "hc_hq_signature", "label": "Headquarters signature perk", "type": "shortText", "required": false, "maxLength": 60, "hint": "A signature perk id the game understands, e.g. daily_free_reroll." },
+        {
+          "id": "hc_archive_collections",
+          "label": "Archive collections",
+          "type": "list",
+          "required": false,
+          "maxItems": 6,
+          "hint": "Relic collections in the world archive.",
+          "fields": [
+            { "id": "col_name", "label": "Collection name", "type": "shortText", "required": true, "maxLength": 120 },
+            {
+              "id": "col_relics",
+              "label": "Relics",
+              "type": "list",
+              "required": true,
+              "minItems": 1,
+              "maxItems": 10,
+              "fields": [
+                { "id": "relic_name", "label": "Relic name", "type": "shortText", "required": true, "maxLength": 120 },
+                { "id": "relic_lore", "label": "Relic lore", "type": "multilineText", "required": false, "maxLength": 600 },
+                { "id": "relic_art", "label": "Relic art", "type": "assetRef", "required": false, "assetKinds": ["image"], "recipes": ["square"] }
+              ]
+            },
+            { "id": "col_reward_character", "label": "Reward skin — character", "type": "entityRef", "entityTypes": ["character"], "required": false },
+            { "id": "col_reward_skin_name", "label": "Reward skin — name", "type": "shortText", "required": false, "maxLength": 80 }
+          ]
+        },
+        { "id": "hc_full_reward_character", "label": "Full-archive reward — character", "type": "entityRef", "entityTypes": ["character"], "required": false },
+        { "id": "hc_full_reward_skin_name", "label": "Full-archive reward — skin name", "type": "shortText", "required": false, "maxLength": 80 }
+      ],
+      "assetSets": [
+        { "id": "hc_world_cover", "label": "World cover", "kinds": ["image"], "roles": ["world.cover"], "recipes": ["landscape_16x9"], "exact": 1 },
+        { "id": "hc_hq_art", "label": "Headquarters art", "kinds": ["image"], "roles": ["world.background"], "recipes": ["landscape_16x9"], "min": 0, "max": 1 },
+        {
+          "id": "hc_chapter_art",
+          "label": "Chapter art — three, in order",
+          "kinds": ["image"],
+          "roles": ["scene.key_art"],
+          "recipes": ["landscape_16x9"],
+          "min": 0,
+          "max": 3,
+          "hint": "One image per campaign chapter, in chapter order."
+        }
+      ]
+    },
+    {
+      "id": "hc_characters",
+      "label": "Characters",
+      "entityTypes": ["character"],
+      "min": 1,
+      "ordered": true,
+      "hint": "Collectible characters. Name, summary, and lore come from the canonical profile; these fields configure gameplay presentation.",
+      "fields": [
+        { "id": "hc_archetype", "label": "Archetype", "type": "enum", "required": true, "options": [
+          { "value": "leader", "label": "Leader" },
+          { "value": "caretaker", "label": "Caretaker" },
+          { "value": "achiever", "label": "Achiever" },
+          { "value": "rebel", "label": "Rebel" },
+          { "value": "dreamer", "label": "Dreamer" },
+          { "value": "freespirit", "label": "Free Spirit" }
+        ] },
+        { "id": "hc_tier", "label": "Acquisition tier", "type": "enum", "required": true, "options": [
+          { "value": "minor", "label": "Minor" },
+          { "value": "medium", "label": "Medium" },
+          { "value": "major", "label": "Major" }
+        ] },
+        { "id": "hc_starting", "label": "Starting character", "type": "boolean", "required": false },
+        { "id": "hc_faction", "label": "Faction id", "type": "shortText", "required": false, "maxLength": 60, "hint": "One of the faction ids declared in this production's Factions list." },
+        { "id": "hc_extra_tags", "label": "Extra tag ids", "type": "list", "required": false, "maxItems": 8, "item": { "id": "hc_tag", "label": "Tag id", "type": "shortText", "maxLength": 60 }, "hint": "Tag ids from the bundled tag vocabulary, e.g. tag_scholar." },
+        { "id": "hc_glyph", "label": "Glyph", "type": "shortText", "required": false, "maxLength": 4 },
+        { "id": "hc_color", "label": "Accent color", "type": "color", "required": false },
+        {
+          "id": "hc_equipment",
+          "label": "Equipment lines",
+          "type": "list",
+          "required": false,
+          "maxItems": 6,
+          "hint": "One entry per slot: attire, tool, accessory, keepsake, emblem, signature.",
+          "fields": [
+            { "id": "equip_slot", "label": "Slot", "type": "enum", "required": true, "options": [
+              { "value": "attire", "label": "Attire" },
+              { "value": "tool", "label": "Tool" },
+              { "value": "accessory", "label": "Accessory" },
+              { "value": "keepsake", "label": "Keepsake" },
+              { "value": "emblem", "label": "Emblem" },
+              { "value": "signature", "label": "Signature" }
+            ] },
+            { "id": "equip_name", "label": "Line name", "type": "shortText", "required": true, "maxLength": 120 },
+            { "id": "equip_art", "label": "Art", "type": "assetRef", "required": false, "assetKinds": ["image"], "recipes": ["square"] }
+          ]
+        },
+        {
+          "id": "hc_skins",
+          "label": "Skins",
+          "type": "list",
+          "required": false,
+          "maxItems": 10,
+          "fields": [
+            { "id": "skin_id", "label": "Skin id", "type": "shortText", "required": true, "maxLength": 60, "hint": "Stable id referenced by archive rewards." },
+            { "id": "skin_name", "label": "Skin name", "type": "shortText", "required": true, "maxLength": 120 },
+            { "id": "skin_art", "label": "Art", "type": "assetRef", "required": false, "assetKinds": ["image"], "recipes": ["portrait_9x16"] }
+          ]
+        }
+      ],
+      "assetSets": [
+        { "id": "hc_portrait", "label": "Portrait", "kinds": ["image"], "roles": ["character.portrait"], "recipes": ["square", "thumbnail_square"], "exact": 1 },
+        { "id": "hc_full_body", "label": "Full body", "kinds": ["image"], "roles": ["character.full_body"], "recipes": ["portrait_9x16"], "min": 0, "max": 1 }
+      ]
+    }
+  ],
+  "assetSets": [
+    { "id": "hc_expedition_art", "label": "Expedition board art", "kinds": ["image"], "roles": ["scene.key_art"], "recipes": ["landscape_16x9"], "min": 0, "max": 1 }
+  ],
+  "documents": { "mode": "linked" },
+  "requiredRecipes": ["landscape_16x9", "square", "thumbnail_square", "portrait_9x16"]
+}

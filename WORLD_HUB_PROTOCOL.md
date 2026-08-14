@@ -48,6 +48,8 @@ A contract is a JSON document with `format: "world-hub-application-contract"` an
 
 Common attributes: `id` (slug), `label`, `required`, `hint`, `default`, plus per-type constraints (`minLength`/`maxLength`/`pattern` for text, `min`/`max`/`step` for numbers).
 
+An `assetRef` field may declare `recipes` (recipe ids) to request renditions for the referenced asset; without it the original bytes ship. Every asset referenced by a contract-defined value — including values nested inside `list` groups and asset-set `itemFields` — is packaged (its `assets/index.json` entries use `setId: "fields"`), and every `entityRef` value pulls its record into the catalog, so packages stay self-contained without app-specific code.
+
 ### Entity selections
 
 Each selection declares `entityTypes`, count bounds (`exact`, or `min`/`max`), optional per-selected-entity `fields`, and optional per-entity `assetSets`. Selections are ordered.
