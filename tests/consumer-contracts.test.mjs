@@ -91,12 +91,13 @@ test('herocollector package carries nested campaign, archive, expedition, and cr
   const worldValues = content.entityValues[worldId];
   assert.equal(worldValues.hc_campaign_nodes.length, 30);
   assert.equal(worldValues.hc_campaign_nodes[10].node_grade, 'improved');
-  assert.equal(worldValues.hc_archive_collections[0].col_relics.length, 2);
+  assert.equal(worldValues.hc_archive_collections.length, 3, 'three archive collections');
+  assert.equal(worldValues.hc_archive_collections[0].col_relics.length, 5, 'five relics each');
   assert.equal(worldValues.hc_archive_collections[0].col_reward_character, built.perCharacter[0].hero.id);
   assert.ok(index.some((entry) => entry.assetId === built.relicArt.id), 'relic art from a nested list is packaged');
   assert.ok(index.some((entry) => entry.assetId === built.crisisArt.id && entry.recipeId === 'landscape_16x9'), 'crisis art packaged with its recipe');
 
-  assert.equal(content.values.hc_crises[0].crisis_fronts.length, 2);
+  assert.equal(content.values.hc_crises[0].crisis_fronts.length, 3);
   assert.equal(content.values.hc_crises[0].crisis_world, worldId);
   assert.equal(content.values.hc_expedition_templates[0].exptpl_reward_package, 'reward_basic');
 

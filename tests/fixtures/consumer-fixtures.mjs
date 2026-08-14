@@ -305,12 +305,44 @@ export async function buildStickerAlbumProduction(library, { variant = 1 } = {})
 export async function buildHeroCollectorProduction(library, { variant = 1 } = {}) {
   const contract = createContract(library, loadConsumerContract('herocollector'));
   const canon = await buildCanon(library, { variant });
-  const { world, heroes } = canon;
+  const { world } = canon;
+  // The game holds a world back below five acquirable characters, and
+  // needs five starting minors; give the pack six.
+  const heroes = [...canon.heroes];
+  for (const name of ['Eryn', 'Fenn', 'Garrow', 'Hale'].slice(0, 6 - heroes.length)) {
+    const extra = createEntity(library, { type: 'character', name, worldId: world.id });
+    updateEntity(library, extra.id, { status: 'canonical', summary: `${name} of Emberfall.` });
+    heroes.push(extra);
+  }
 
   const production = createProduction(library, {
     name: variant === 1 ? 'Emberfall Pack' : 'Emberfall Pack v2',
     contractId: contract.contractId,
     worldId: world.id,
+  });
+
+  /* campaigns */
+  const families = ['metal', 'fiber', 'mineral', 'compound', 'mechanism', 'essence'];
+  const grades = ['improved', 'improved', 'advanced'];
+  const chapterNodes = (prefix, base) => Array.from({ length: 10 }, (_, i) => ({
+    [`${prefix}node_name`]: `${prefix === 'm' ? 'Main' : 'Shadow'} Node ${i + 1}`,
+    [`${prefix}node_threshold`]: base + i * 40,
+    [`${prefix}node_family`]: families[i % 6],
+    [`${prefix}node_grade`]: 'basic',
+  }));
+  const castForShadow = heroes.slice(0, variant === 1 ? 5 : 6);
+  setProductionValue(library, production.id, {
+    scope: 'production', field: 'hc_main_chapters',
+    value: [{ chapter_title: 'Emberfall · The First Light', chapter_nodes: chapterNodes('m', 50) }],
+  });
+  setProductionValue(library, production.id, {
+    scope: 'production', field: 'hc_shadow_chapters',
+    value: [{
+      shadow_title: 'Emberfall · Shadows',
+      shadow_nodes: chapterNodes('s', 60).map((node, i) => ({
+        ...node, snode_shard_character: castForShadow[i % castForShadow.length].id,
+      })),
+    }],
   });
 
   /* production-level libraries */
@@ -350,14 +382,21 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
       crisis_opening: 'The cage hums off-key.', crisis_art: crisisArt.id, crisis_weight: 10, crisis_min_cleared: 3,
       crisis_fronts: [
         { front_id: 'front_gate', front_name: 'The Gate', front_description: 'Hold the gate.', front_favored_tags: ['tag_scholar'], front_power_local: 100, front_power_major: 300, front_power_world: 900, front_struggle_text: 'The gate held, barely.', front_success_text: 'The gate held.', front_excel_text: 'The gate never wavered.' },
-        { front_id: 'front_canal', front_name: 'The Canals', front_description: 'Calm the canals.', front_favored_tags: [], front_power_local: 120, front_power_major: 320, front_power_world: 950, front_struggle_text: 'The canals steamed.', front_success_text: 'The canals calmed.', front_excel_text: 'The canals sang.' },
+        { front_id: 'front_canal', front_name: 'The Canals', front_description: 'Calm the canals.', front_favored_tags: ['tag_artisan'], front_power_local: 120, front_power_major: 320, front_power_world: 950, front_struggle_text: 'The canals steamed.', front_success_text: 'The canals calmed.', front_excel_text: 'The canals sang.' },
+        { front_id: 'front_quarter', front_name: 'The Cold Quarter', front_description: 'Warm the quarter.', front_favored_tags: ['tag_medic'], front_power_local: 110, front_power_major: 310, front_power_world: 930, front_struggle_text: 'The quarter shivered.', front_success_text: 'The quarter warmed.', front_excel_text: 'The quarter glowed.' },
       ],
       crisis_consolation: [{ cons_kind: 'resource', cons_id: 'renown', cons_amount: 10 }],
-      crisis_cache_choices: [{
-        cache_id: 'cache_supply', cache_name: 'Supply Cache',
-        cache_entries: [{ centry_kind: 'energy', centry_id: '', centry_amount: 10 }],
-      }],
-      crisis_boon_text: 'The star remembers your help.',
+      crisis_cache_choices: [
+        { cache_id: 'cache_supply', cache_name: 'Supply Cache',
+          cache_entries: [{ centry_kind: 'energy', centry_id: '', centry_amount: 10 }] },
+        { cache_id: 'cache_renown', cache_name: 'Renown Cache',
+          cache_entries: [{ centry_kind: 'resource', centry_id: 'renown', centry_amount: 40 }] },
+        { cache_id: 'cache_intel', cache_name: 'Intelligence Cache',
+          cache_entries: [{ centry_kind: 'resource', centry_id: 'intelligence', centry_amount: 2 }] },
+      ],
+      crisis_boon_type: 'free_world_node_runs',
+      crisis_boon_runs: 3,
+      crisis_boon_prose: 'The star remembers your help.',
     }],
   });
 
@@ -377,26 +416,29 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
     hc_full_reward_character: heroes[0].id,
     hc_full_reward_skin_name: 'Starlit Ash',
   };
-  const families = ['metal', 'fiber', 'mineral', 'compound', 'mechanism', 'essence'];
-  const grades = ['improved', 'improved', 'advanced'];
+  const cast = heroes.slice(0, variant === 1 ? 5 : 6);
   worldValues.hc_campaign_nodes = Array.from({ length: 30 }, (_, i) => ({
     node_name: `Node ${i + 1}`,
     node_threshold: 100 + i * 50,
     node_family: families[i % 6],
     node_grade: grades[Math.floor(i / 10)],
+    node_shard_character: i % 6 === 5 ? cast[(i / 6 | 0) % cast.length].id : null,
   }));
   const facilityArt = await importImage(library, 'Forge facility art', { seed: 3100 });
   worldValues.hc_hq_facilities = [{ facility_id: 'fac_forge', facility_name: 'Star Forge', facility_description: 'Refines emberlight.', facility_art: facilityArt.id }];
   const relicArt = await importImage(library, 'Relic ember shard', { seed: 3200 });
-  worldValues.hc_archive_collections = [{
-    col_name: 'First Sparks',
-    col_relics: [
-      { relic_name: 'Ember Shard', relic_lore: 'A cooled fragment of the star.', relic_art: relicArt.id },
-      { relic_name: 'Cage Key', relic_lore: 'It opens nothing anymore.', relic_art: null },
-    ],
-    col_reward_character: heroes[0].id,
-    col_reward_skin_name: 'Vigil Ash',
-  }];
+  // The game requires two archive fragments per world-campaign node:
+  // 30 nodes -> 15 relics -> three collections of five.
+  worldValues.hc_archive_collections = [1, 2, 3].map((c) => ({
+    col_name: ['First Sparks', 'Cooling Embers', 'Star Memories'][c - 1],
+    col_relics: Array.from({ length: 5 }, (_, r) => ({
+      relic_name: `Relic ${(c - 1) * 5 + r + 1}`,
+      relic_lore: r === 0 ? 'A cooled fragment of the star.' : '',
+      relic_art: c === 1 && r === 0 ? relicArt.id : null,
+    })),
+    col_reward_character: c === 1 ? heroes[0].id : null,
+    col_reward_skin_name: c === 1 ? 'Vigil Ash' : null,
+  }));
   for (const [field, value] of Object.entries(worldValues)) {
     setProductionValue(library, production.id, { scope: 'entity', entityId: world.id, field, value });
   }
@@ -411,7 +453,6 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
   setAssetSetItems(library, production.id, { slot: 'hc_chapter_art', entityId: world.id, items: items(chapterArts) });
 
   /* characters */
-  const cast = heroes.slice(0, variant === 1 ? 2 : 3);
   setSelection(library, production.id, 'hc_characters', cast.map((hero) => hero.id));
   const archetypes = ['leader', 'dreamer', 'rebel', 'caretaker'];
   const perCharacter = [];
@@ -420,8 +461,8 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
     const skinArt = await importImage(library, `${hero.name} skin art`, { seed: 3500 + index });
     const values = {
       hc_archetype: archetypes[index % archetypes.length],
-      hc_tier: index === 0 ? 'major' : 'minor',
-      hc_starting: index === 0,
+      hc_tier: 'minor',
+      hc_starting: true,
       hc_faction: 'faction_emberguard',
       hc_extra_tags: ['tag_scholar'],
       hc_glyph: hero.name[0],
@@ -430,7 +471,12 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
         { equip_slot: 'attire', equip_name: `${hero.name}'s Ember Cloak`, equip_art: null },
         { equip_slot: 'signature', equip_name: `${hero.name}'s Star Brand`, equip_art: equipArt.id },
       ],
-      hc_skins: [{ skin_id: `skin_${index === 0 ? 'vigil_ash' : `hero_${index}`}`, skin_name: index === 0 ? 'Vigil Ash' : 'Festival Wear', skin_art: skinArt.id }],
+      hc_skins: index === 0
+        ? [
+          { skin_id: 'skin_vigil_ash', skin_name: 'Vigil Ash', skin_art: skinArt.id },
+          { skin_id: 'skin_starlit_ash', skin_name: 'Starlit Ash', skin_art: null },
+        ]
+        : [{ skin_id: `skin_hero_${index}`, skin_name: 'Festival Wear', skin_art: skinArt.id }],
     };
     for (const [field, value] of Object.entries(values)) {
       setProductionValue(library, production.id, { scope: 'entity', entityId: hero.id, field, value });
