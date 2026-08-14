@@ -631,6 +631,21 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
   /* production content */
   const production = snapshot.production;
   writePackageFile('production/contract.json', stableJson(snapshot.contract));
+  /* Export only live production data: per-entity values and asset sets
+     belonging to entities that are still selected. Rows kept in the
+     database for deselected entities (so re-adding restores them) must
+     not leak into the package, where their targets are not included. */
+  const selectedIds = new Set(Object.values(production.selections).flat().map((entity) => entity.id));
+  const productionSetIds = new Set((snapshot.contract.assetSets ?? []).map((set) => set.id));
+  const liveEntityValues = Object.fromEntries(
+    Object.entries(production.entityValues).filter(([entityId]) => selectedIds.has(entityId)));
+  const liveAssetSets = Object.fromEntries(
+    Object.entries(production.assetSets).filter(([key]) => {
+      const colon = key.indexOf(':');
+      if (colon === -1) return productionSetIds.has(key);
+      return selectedIds.has(key.slice(colon + 1));
+    }));
+
   writePackageFile('production/content.json', stableJson({
     id: production.id,
     name: production.name,
@@ -638,11 +653,11 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
     revision: production.revision,
     worldId: production.world?.id ?? null,
     values: production.values,
-    entityValues: production.entityValues,
+    entityValues: liveEntityValues,
     selections: Object.fromEntries(Object.entries(production.selections).map(([slot, list]) => [
       slot, list.map((entity) => entity.id),
     ])),
-    assetSets: Object.fromEntries(Object.entries(production.assetSets).map(([key, list]) => [
+    assetSets: Object.fromEntries(Object.entries(liveAssetSets).map(([key, list]) => [
       key, list.map((item) => ({ assetId: item.assetId, values: item.values })),
     ])),
   }));
@@ -795,6 +810,18 @@ function verifyAssembledPackage(workAbs, assembly) {
   for (const ref of contentRefs.assetRefs) {
     if (!packagedAssetIds.has(ref.assetId)) {
       throw domainError('publish.value_asset_dangling', 'A production value references an asset outside the package.');
+    }
+  }
+  for (const itemsList of Object.values(packagedContent.assetSets ?? {})) {
+    for (const item of itemsList) {
+      if (!packagedAssetIds.has(item.assetId)) {
+        throw domainError('publish.set_asset_dangling', 'A packaged asset set references an asset outside the package.');
+      }
+    }
+  }
+  for (const entityId of Object.keys(packagedContent.entityValues ?? {})) {
+    if (!entityIds.has(entityId)) {
+      throw domainError('publish.entity_values_dangling', 'Packaged per-record values reference a record outside the package.');
     }
   }
 
