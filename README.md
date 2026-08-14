@@ -83,6 +83,38 @@ Markdown files and original assets are ordinary files — you can read and back 
 - **Missing renditions or search oddities** — run Integrity (Care → Integrity → *Run all checks →*). Renditions regenerate deterministically; the search index rebuilds from the database.
 - **Native module errors on start** — rerun `npx electron-builder install-app-deps`.
 
+## Consumer applications
+
+Four sibling applications consume World Hub publications: Task Stamps,
+ChatBot, Sticker Album, and Hero Collector. The integration follows one rule:
+
+```text
+canonical library → production → immutable publication → consumer's own cache
+```
+
+- **Contracts** — each consumer owns its Application Contract at
+  `<App>/worldhub/application-contract.json`. World Hub keeps test copies in
+  `tests/fixtures/contracts/` (re-sync with
+  `node scripts/sync-consumer-contracts.mjs`); a contract edit in a consumer
+  repo is imported into a library through the Contracts screen (raw JSON view)
+  and becomes a new contract version there.
+- **Creating productions** — create a Production from the app's contract,
+  fill its fields and selections, mark it ready, and publish. Consumers
+  install the ZIP export, or link the production folder
+  (`productions/<slug>/`) and pull updates from `current.json`.
+- **Conformance fixtures** — `node scripts/generate-consumer-fixtures.mjs`
+  builds synthetic packages (valid v1, valid v2 update, six adversarial
+  variants, and an `expected.json`) into every consumer repository's
+  `tests/fixtures/worldhub/`; all four consumer test suites run against them.
+- **Generic extension made for this integration** — reference-typed
+  Production values (`entityRef`/`assetRef`, including inside nested lists
+  and asset-set item fields) are resolved into packages, with an optional
+  `recipes` hint on `assetRef` fields. No app-specific code exists in the
+  publication engine.
+
+The integration audit and conformance matrix live in
+[WORLD_HUB_INTEGRATION_AUDIT.md](WORLD_HUB_INTEGRATION_AUDIT.md).
+
 ## Documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — processes, services, database model, atomicity.

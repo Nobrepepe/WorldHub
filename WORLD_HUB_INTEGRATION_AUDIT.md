@@ -56,6 +56,31 @@ Everything under "user-state sources" above, plus: ChatBot conversation-derived 
 6. **Corrupt/adversarial packages** — all consumers validate in staging (ZIP path safety, manifest/protocol/appType, embedded contract, checksums, references, then app semantic validation) before any activation; failure changes nothing.
 7. **Pre-existing uncommitted work** (HeroCollector, StickerAlbum) — integration files are new modules/dirs where possible; existing modified files are not reverted or rewritten wholesale.
 
-## Conformance matrix
+## Conformance matrix (Phase 8)
 
-Filled in during Phase 8.
+Verified 2026-08-14. TS = TaskStamps (83 tests), CB = ChatBot (36), SA = StickerAlbum (123), HC = HeroCollector (87); WorldHub 66 + smoke.
+
+| Requirement | TS | CB | SA | HC |
+| --- | :-: | :-: | :-: | :-: |
+| Authoritative contract in consumer repo, validates against Contract v1 | ✔ | ✔ | ✔ | ✔ |
+| Representative publication publishes + verifies from World Hub | ✔ | ✔ | ✔ | ✔ |
+| Install publication ZIP | ✔ | ✔ | ✔ | ✔ |
+| Link production folder + check for update | ✔ | ✔ | ✔ | ✔ |
+| Full validation before activation (paths, manifest, contract, checksums, references, app semantics) | ✔ | ✔ | ✔ | ✔ |
+| Corrupt checksum rejected, nothing changes | ✔ | ✔ | ✔ | ✔ |
+| Unlisted file rejected | ✔ | ✔ | ✔ | ✔ |
+| Missing referenced asset rejected | ✔ | ✔ | ✔ | ✔ |
+| Wrong applicationType rejected | ✔ | ✔ | ✔ | ✔ |
+| Unsupported protocol version rejected | ✔ | ✔ | ✔ | ✔ |
+| Traversal/absolute-path ZIP rejected | ✔ | ✔ | ✔ | ✔ |
+| Failure-safe staged activation, atomic pointer | ✔ | ✔ | ✔ | ✔ |
+| Import receipt with full provenance | ✔ | ✔ | ✔ | ✔ |
+| Meaningful update preview | ✔ | ✔ | ✔ | ✔ |
+| Rollback to previous publication | ✔ | ✔ | ✔ | ✔ |
+| User state survives update/rename/retirement/failed import/rollback | ✔ | ✔ | ✔ | ✔ |
+| Retirement is non-destructive (app-specific rule) | archive + reassignment | pinned scenes keep rows | last definition retained | dormant save data |
+| Works offline from installed cache | ✔ | ✔ | ✔ | ✔ |
+| Hub mode makes legacy authoring read-only/hidden; legacy data untouched | ✔ | ✔ | ✔ | ✔ |
+| Never reads World Hub DB / library internals (grep-verified) | ✔ | ✔ | ✔ | ✔ |
+
+World Hub side: no app-specific exporter or code path exists in the publication engine (grep-verified); packages are deterministic and immutable (test-verified). App-specific acceptance: TaskStamps historical boards resolve exact asset versions; ChatBot conversations stay pinned to their original publication with an explicit migrate action; StickerAlbum ownership is keyed by stable `hub:<char>:<slot>` identity; HeroCollector packages pass the game's own `validateContent()` and `gameReadiness()` with an explicit backed-up save-ID migration.
