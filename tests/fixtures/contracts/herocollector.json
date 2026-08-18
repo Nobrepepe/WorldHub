@@ -618,7 +618,7 @@
             "image"
           ],
           "recipes": [
-            "landscape_16x9"
+            "tile_16x9"
           ]
         },
         {
@@ -1248,7 +1248,7 @@
             "world.cover"
           ],
           "recipes": [
-            "landscape_16x9"
+            "tile_16x9"
           ],
           "exact": 1
         },
@@ -1262,7 +1262,7 @@
             "world.background"
           ],
           "recipes": [
-            "landscape_16x9"
+            "tile_16x9"
           ],
           "min": 0,
           "max": 1
@@ -1277,7 +1277,7 @@
             "scene.key_art"
           ],
           "recipes": [
-            "landscape_16x9"
+            "tile_16x9"
           ],
           "min": 0,
           "max": 3,
@@ -1480,7 +1480,7 @@
                 "image"
               ],
               "recipes": [
-                "portrait_9x16"
+                "full_body_9x16"
               ]
             }
           ]
@@ -1512,7 +1512,7 @@
             "character.full_body"
           ],
           "recipes": [
-            "portrait_9x16"
+            "full_body_9x16"
           ],
           "min": 0,
           "max": 1
@@ -1531,7 +1531,7 @@
         "scene.key_art"
       ],
       "recipes": [
-        "landscape_16x9"
+        "tile_16x9"
       ],
       "min": 0,
       "max": 1
@@ -1541,9 +1541,9 @@
     "mode": "linked"
   },
   "requiredRecipes": [
-    "landscape_16x9",
+    "tile_16x9",
     "square",
     "thumbnail_square",
-    "portrait_9x16"
+    "full_body_9x16"
   ]
 }

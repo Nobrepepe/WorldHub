@@ -8,6 +8,7 @@ import {
   restoreArchiveToNewFolder, replaceCurrentFromArchive, recoverDatabaseFromBackup,
 } from '../../services/backup-service.js';
 import { runIntegrityChecks, lastIntegrityRun, runRepair } from '../../services/integrity-service.js';
+import { archiveOverview, previewPurge, purgeArchive, PURGE_SCOPES } from '../../services/archive-service.js';
 import { getAllSettings, setSetting } from '../../services/settings-service.js';
 import { writeJsonAtomic } from '../../services/atomic-file.js';
 import { librarySummary, DESCRIPTOR_FILENAME } from '../../services/library-service.js';
@@ -153,6 +154,37 @@ register('integrity.run', {
 register('integrity.last', {
   payload: v.none(),
   handler: (ctx) => lastIntegrityRun(ctx.library),
+});
+
+/* ---------------- clearing the archive ---------------- */
+
+register('archive.overview', {
+  payload: v.none(),
+  handler: (ctx) => archiveOverview(ctx.library),
+});
+
+register('archive.preview', {
+  payload: v.object({
+    scopes: v.array(v.enum(PURGE_SCOPES), { max: PURGE_SCOPES.length }),
+    includePublications: v.optional(v.boolean(), false),
+  }),
+  handler: (ctx, payload) => previewPurge(ctx.library, payload),
+});
+
+register('archive.purge', {
+  requiresWrite: true,
+  payload: v.object({
+    scopes: v.array(v.enum(PURGE_SCOPES), { min: 1, max: PURGE_SCOPES.length }),
+    includePublications: v.optional(v.boolean(), false),
+  }),
+  handler: async (ctx, payload) => {
+    /* The database goes into a safety backup before anything leaves it.
+       Original files are not in that backup — only a full archive keeps
+       those — which is why the panel says so before asking. */
+    const backup = await createSafetyBackup(ctx.library, 'archive-purge');
+    const result = purgeArchive(ctx.library, payload);
+    return { ...result, backup: backup?.name ?? null };
+  },
 });
 
 register('integrity.repair', {

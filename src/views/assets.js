@@ -44,19 +44,22 @@ export async function renderAssets() {
         'Nothing has been filed yet — bring the first folder into the Inbox, or import files directly.'));
       return;
     }
-    const gallery = el('div', { class: 'gallery', role: 'list' });
+    const gallery = el('div', { class: 'gallery assets-gallery', role: 'list' });
     for (const asset of assets) {
-      gallery.append(el('div', {
+      const art = asset.kind === 'image'
+        ? artImg(asset.thumbUrl, { alt: asset.title, assetId: asset.id, recipeId: 'tile_16x9' })
+        : el('div', { class: 'no-art', style: { aspectRatio: '16 / 10' } }, asset.kind.toUpperCase());
+      const tile = el('div', {
         class: 'gallery-item', role: 'listitem', tabindex: '0', 'aria-label': asset.title,
         onclick: () => navigate(`/asset/${asset.id}`),
         onkeydown: (e) => { if (e.key === 'Enter') navigate(`/asset/${asset.id}`); },
       },
-        asset.kind === 'image'
-          ? artImg(asset.thumbUrl, { alt: asset.title })
-          : el('div', { class: 'no-art', style: { aspectRatio: '16 / 10' } }, asset.kind.toUpperCase()),
+        art,
         el('div', { class: 'g-name' }, asset.title),
         el('div', { class: 'g-sub' }, [asset.kind, ...(asset.roles ?? [])].join(' · ') || ' '),
-      ));
+      );
+      gallery.append(tile);
+      if (asset.kind === 'image' && !readOnly) loadLandscapeRenditionWhenVisible(tile, art, asset);
     }
     galleryHost.append(gallery);
   };
@@ -139,6 +142,26 @@ export async function renderAssets() {
   return host;
 }
 
+function loadLandscapeRenditionWhenVisible(tile, image, asset) {
+  const generate = async () => {
+    const rendition = await callSafe('rendition.generate', {
+      versionId: asset.currentVersionId,
+      recipeId: 'tile_16x9',
+    });
+    if (rendition && image.isConnected) image.src = rendition.url;
+  };
+  if (!('IntersectionObserver' in window)) {
+    generate();
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    observer.disconnect();
+    generate();
+  }, { rootMargin: '200px' });
+  observer.observe(tile);
+}
+
 /* ---------------- asset detail ---------------- */
 
 export async function renderAssetDetail({ id }) {
@@ -169,10 +192,20 @@ export async function renderAssetDetail({ id }) {
 
   /* current art or media */
   if (asset.kind === 'image' && asset.url) {
-    host.append(el('div', { class: 'hero' },
-      artImg(asset.url, { alt: asset.title, className: 'hero-art art-bleed' }),
-      el('div', { class: 'hero-glow' }),
-    ));
+    const media = el('div', { class: 'section' },
+      artImg(current.url, { alt: asset.title, className: 'asset-original-preview' }));
+    const bannerHost = el('div', {});
+    media.append(el('p', { style: { marginTop: '0.7rem' } }, el('button', {
+      class: 'btn',
+      onclick: async () => {
+        const rendition = await callSafe('rendition.generate', { versionId: current.id, recipeId: 'tile_16x9' });
+        bannerHost.replaceChildren(rendition
+          ? artImg(`${rendition.url}?t=${Date.now()}`, { alt: `${asset.title} as banner`, className: 'hero-art' })
+          : el('p', { class: 'state-bad' }, 'The banner preview could not be generated.'));
+      },
+    }, 'Preview as banner')),
+    bannerHost);
+    host.append(media);
   } else if (asset.kind === 'audio' && current) {
     const audio = el('audio', { controls: true, src: current.url, style: { width: '100%', maxWidth: '30rem' } });
     host.append(el('div', { class: 'section' }, audio));
@@ -233,7 +266,7 @@ export async function renderAssetDetail({ id }) {
     }
   };
   const addLinkFlow = async () => {
-    const picked = await pickEntity({ title: 'Associate this asset with…' });
+    const picked = await pickEntity({ title: 'Associate this asset with…', worldCharacterFilter: true });
     if (!picked) return;
     const roles = await call('asset.roles');
     openOverlay((close) => {
@@ -406,6 +439,9 @@ async function openRenditionEditor(asset, version, onDone) {
         }
         const rendition = await call('rendition.generate', { versionId: version.id, recipeId: currentRecipe.id });
         previewImg.src = `${rendition.url}?t=${Date.now()}`;
+        document.dispatchEvent(new CustomEvent('worldhub:rendition-changed', {
+          detail: { assetId: asset.id, versionId: version.id, recipeId: currentRecipe.id, url: rendition.url },
+        }));
         previewState.textContent = `${currentRecipe.id} — ${rendition.width}×${rendition.height}, regenerated deterministically.`;
         previewState.className = 'save-state saved';
       } catch (err) {

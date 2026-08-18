@@ -107,11 +107,11 @@ export function up(db) {
   `);
   const recipes = [
     { id: 'thumbnail_square', name: 'Thumbnail square', width: 320, height: 320, fit: 'contain', format: 'webp', quality: 80, preserve_alpha: 1, background: '', allow_upscale: 0 },
-    { id: 'square', name: 'Square', width: 1024, height: 1024, fit: 'cover', format: 'webp', quality: 84, preserve_alpha: 0, background: '', allow_upscale: 0 },
-    { id: 'landscape_16x9', name: 'Landscape 16:9', width: 1600, height: 900, fit: 'cover', format: 'webp', quality: 84, preserve_alpha: 0, background: '', allow_upscale: 0 },
+    { id: 'square', name: 'Square', width: 1024, height: 1024, fit: 'cover', format: 'webp', quality: 84, preserve_alpha: 1, background: '', allow_upscale: 0 },
+    { id: 'landscape_16x9', name: 'Landscape 16:9', width: 1600, height: 900, fit: 'cover', format: 'webp', quality: 84, preserve_alpha: 1, background: '', allow_upscale: 0 },
     { id: 'wide_tile_16x9', name: 'Wide tile 16:9', width: 1280, height: 720, fit: 'contain', format: 'webp', quality: 84, preserve_alpha: 1, background: '', allow_upscale: 0 },
-    { id: 'portrait_9x16', name: 'Portrait 9:16', width: 900, height: 1600, fit: 'cover', format: 'webp', quality: 84, preserve_alpha: 0, background: '', allow_upscale: 0 },
-    { id: 'card_3x4', name: 'Card 3:4', width: 900, height: 1200, fit: 'cover', format: 'webp', quality: 84, preserve_alpha: 0, background: '', allow_upscale: 0 },
+    { id: 'portrait_9x16', name: 'Portrait 9:16', width: 900, height: 1600, fit: 'cover', format: 'webp', quality: 84, preserve_alpha: 1, background: '', allow_upscale: 0 },
+    { id: 'card_3x4', name: 'Card 3:4', width: 900, height: 1200, fit: 'cover', format: 'webp', quality: 84, preserve_alpha: 1, background: '', allow_upscale: 0 },
     { id: 'original', name: 'Original', width: null, height: null, fit: 'none', format: 'original', quality: 100, preserve_alpha: 1, background: '', allow_upscale: 0 },
   ];
   for (const recipe of recipes) insert.run({ ...recipe, now });

@@ -3,7 +3,8 @@ import { register } from '../registry.js';
 import { v } from '../validate.js';
 import {
   importIntoInbox, listBatches, listInbox, itemExcerpt,
-  fileItemAsAsset, fileItemAsDocument, setItemStatus, undoLastFiling, clearFiledStaging, suggestMatches,
+  fileItemAsAsset, fileItemAsNewVersion, fileItemAsDocument, setItemStatus, setItemsStatus,
+  undoLastFiling, clearFiledStaging, suggestMatches,
 } from '../../services/inbox-service.js';
 
 register('inbox.pickImportFiles', {
@@ -44,6 +45,7 @@ register('inbox.list', {
     kind: v.optional(v.enum(['image', 'audio', 'markdown', 'attachment'])),
     text: v.optional(v.string({ max: 200 })),
     folder: v.optional(v.string({ max: 500 })),
+    nameMatch: v.optional(v.boolean()),
     limit: v.optional(v.integer({ min: 1, max: 5000 }), 1000),
   }),
   handler: (ctx, payload) => listInbox(ctx.library, payload),
@@ -73,6 +75,16 @@ register('inbox.fileAsset', {
   },
 });
 
+register('inbox.fileAsNewVersion', {
+  requiresWrite: true,
+  payload: v.object({
+    id: v.uuid(),
+    assetId: v.uuid(),
+    note: v.optional(v.string({ max: 500, trim: true }), ''),
+  }),
+  handler: (ctx, { id, ...rest }) => fileItemAsNewVersion(ctx.library, id, rest),
+});
+
 register('inbox.fileDocument', {
   requiresWrite: true,
   payload: v.object({
@@ -90,6 +102,15 @@ register('inbox.setStatus', {
     status: v.enum(['unreviewed', 'duplicate', 'ignored']),
   }),
   handler: (ctx, { id, status }) => setItemStatus(ctx.library, id, status),
+});
+
+register('inbox.setStatuses', {
+  requiresWrite: true,
+  payload: v.object({
+    ids: v.array(v.uuid(), { min: 1, max: 2000 }),
+    status: v.enum(['unreviewed', 'duplicate', 'ignored']),
+  }),
+  handler: (ctx, { ids, status }) => setItemsStatus(ctx.library, ids, status),
 });
 
 register('inbox.undoLast', {

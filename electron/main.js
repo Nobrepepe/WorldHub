@@ -142,6 +142,19 @@ function createMainWindow() {
     });
   }
 
+  if (process.env.WORLDHUB_SMOKE_CREATE_DIRECTORY) {
+    win.webContents.once('did-finish-load', async () => {
+      try {
+        await runChooserSmoke(win);
+        process.stdout.write('[chooser-smoke] passed\n');
+        app.exit(0);
+      } catch (err) {
+        process.stderr.write(`[chooser-smoke] FAILED: ${err.stack ?? err}\n`);
+        app.exit(1);
+      }
+    });
+  }
+
   // No window may navigate away from the app or open external windows.
   win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -183,6 +196,52 @@ function createMainWindow() {
   win.on('closed', () => {
     if (appContext.mainWindow === win) appContext.mainWindow = null;
   });
+}
+
+async function runChooserSmoke(win) {
+  await win.webContents.executeJavaScript(`(async () => {
+    const waitFor = async (predicate, label) => {
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        const value = predicate();
+        if (value) return value;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error('Timed out waiting for ' + label);
+    };
+    const button = (text) => [...document.querySelectorAll('button')].find((item) => item.textContent.includes(text));
+    const visibleMain = () => document.querySelector('#main-inner');
+    const assertPage = async (path, heading, control) => {
+      location.hash = path;
+      const host = await waitFor(() => {
+        const candidate = visibleMain();
+        return candidate?.querySelector('h1')?.textContent.includes(heading) && candidate;
+      }, heading + ' page');
+      if (![...host.querySelectorAll('button, a')].some((item) => item.textContent.includes(control))) {
+        throw new Error(heading + ' is missing its ' + control + ' control');
+      }
+    };
+    const checkRoutes = async () => {
+      await assertPage('/home', 'The archive is empty', 'Create a world');
+      await assertPage('/worlds', 'Worlds', 'Create a world');
+      await assertPage('/characters', 'Characters', 'Create a character');
+      await assertPage('/inbox', 'Inbox', 'Bring a folder');
+      await assertPage('/documents', 'Documents', 'Write a new document');
+      await assertPage('/assets', 'Assets', 'Import files');
+    };
+
+    (await waitFor(() => button('Create a library'), 'chooser create button')).click();
+    const form = await waitFor(() => document.querySelector('.overlay form'), 'library name form');
+    form.querySelector('input').value = 'Chooser Smoke Library';
+    form.requestSubmit();
+    await waitFor(visibleMain, 'visible main content');
+    await checkRoutes();
+
+    await window.worldhub.invoke('library.close');
+    (await waitFor(() => document.querySelector('.recent-btn'), 'recent library button')).click();
+    await waitFor(visibleMain, 'reopened visible main content');
+    await checkRoutes();
+  })()`);
 }
 
 /** One-shot listener used by the pre-close flush handshake. */

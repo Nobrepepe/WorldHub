@@ -7,7 +7,7 @@ import { showToast } from '../ui/toast.js';
 import { textInput } from '../ui/forms.js';
 import { getState } from '../store.js';
 import {
-  detailHeader, tabbedSections, baseFieldsSection, profileField,
+  detailHeader, tabbedSections, baseFieldsSection, profileField, displayArtSection, resolveEntityArt,
   documentsSection, assetsSection, relationshipsSection, usageSection, archiveControls,
 } from './detail-common.js';
 import { createAutosaver } from '../ui/autosave.js';
@@ -32,6 +32,7 @@ export async function renderWorlds() {
     });
     const q = filter.text.trim().toLowerCase();
     const visible = q ? worlds.filter((world) => world.name.toLowerCase().includes(q)) : worlds;
+    await Promise.all(visible.map(async (world) => Object.assign(world, artView(await resolveEntityArt(world, 'tile_16x9', 'cover')))));
 
     if (visible.length === 0) {
       galleryHost.append(el('p', { class: 'empty-state' },
@@ -50,7 +51,7 @@ export async function renderWorlds() {
         onclick: () => navigate(`/world/${world.id}`),
         onkeydown: (e) => { if (e.key === 'Enter') navigate(`/world/${world.id}`); },
       },
-        artImg(world.artUrl, { alt: world.name }),
+        artImg(world.artUrl, { alt: world.name, assetId: world.artAssetId, recipeId: world.artRecipeId }),
         el('div', { class: 'g-name' }, world.name),
         el('div', { class: 'g-sub' }, world.status === 'archived' ? 'archived' : world.summary || ' '),
       ));
@@ -106,11 +107,12 @@ export async function renderWorlds() {
 
 export async function renderWorldDetail({ id }) {
   let entity = await call('entity.get', { id });
+  Object.assign(entity, artView(await resolveEntityArt(entity, 'tile_16x9', 'background')));
   const host = el('div', { class: 'main-inner wide' });
   const head = detailHeader(entity, { eyebrow: 'World' });
   host.append(head);
 
-  const overview = () => {
+  const overview = async () => {
     const container = el('div', { style: { maxWidth: '44rem' } });
     const { host: baseHost } = baseFieldsSection(entity, { onSaved: (updated) => { entity = updated; } });
 
@@ -127,6 +129,10 @@ export async function renderWorldDetail({ id }) {
       saver.markDirty();
     };
     const p = entity.profile;
+    const artSection = await displayArtSection(entity, [
+      { label: 'Cover', role: 'world.cover', profileKey: 'coverAssetId', dbKey: 'cover_asset_id', recipeId: 'tile_16x9' },
+      { label: 'Background', role: 'world.background', profileKey: 'backgroundAssetId', dbKey: 'background_asset_id', recipeId: 'tile_16x9' },
+    ], (updated) => { entity = updated; navigate(`/world/${entity.id}`); });
     container.append(
       baseHost,
       el('hr', { class: 'rule' }),
@@ -139,6 +145,7 @@ export async function renderWorldDetail({ id }) {
         profileField('Setting, in short', 'settingDescription', p.setting_description, change, { multiline: true }),
         profileField('Visual direction', 'visualDirection', p.visual_direction, change, { multiline: true }),
       ),
+      artSection,
       archiveControls(entity, { onChanged: () => navigate(`/world/${entity.id}`) }),
     );
     return container;
@@ -169,6 +176,7 @@ async function membersSection(world, kind) {
         ? `No characters live in ${world.name} yet.`
         : `No entries describe ${world.name} yet — locations, groups, species, objects, events, and lore all belong here.`));
   } else if (kind === 'character') {
+    await Promise.all(members.map(async (member) => Object.assign(member, artView(await resolveEntityArt(member, 'portrait_3x4', 'portrait')))));
     const gallery = el('div', { class: 'gallery portraits' });
     for (const member of members) {
       gallery.append(el('div', {
@@ -176,7 +184,7 @@ async function membersSection(world, kind) {
         onclick: () => navigate(`/character/${member.id}`),
         onkeydown: (e) => { if (e.key === 'Enter') navigate(`/character/${member.id}`); },
       },
-        artImg(member.artUrl, { alt: member.name }),
+        artImg(member.artUrl, { alt: member.name, assetId: member.artAssetId, recipeId: member.artRecipeId }),
         el('div', { class: 'g-name' }, member.name),
         el('div', { class: 'g-sub' }, member.summary || member.status),
       ));
@@ -211,6 +219,10 @@ async function membersSection(world, kind) {
     ));
   }
   return host;
+}
+
+function artView(art) {
+  return { artUrl: art.url, artAssetId: art.assetId, artRecipeId: art.recipeId };
 }
 
 export function createNamedEntity(type, worldId, onCreated) {

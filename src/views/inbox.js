@@ -12,6 +12,24 @@ import { refreshCounts } from '../app.js';
  * Inbox: fast triage for many imported files. Sources are never
  * changed; folder names never become canon automatically.
  */
+
+/**
+ * A name the library already holds. Neither an error nor a status —
+ * usually it means "this is newer art for that asset", which is offered
+ * as its own route when the item is filed.
+ */
+function nameMatchNote(match) {
+  return el('div', { class: 'row-sub' },
+    'Same name as ',
+    el('a', {
+      href: `#/asset/${match.assetId}`,
+      'aria-label': `Open the existing asset ${match.title}`,
+      onclick: (e) => e.stopPropagation(),
+    }, `“${match.title}”`),
+    match.status === 'archived' ? ' — archived' : '',
+    match.total > 1 ? ` · ${match.total} assets share this name` : '',
+  );
+}
 export async function renderInbox() {
   const readOnly = getState().library?.readOnly;
   const host = el('div', { class: 'main-inner wide' },
@@ -22,7 +40,7 @@ export async function renderInbox() {
     ),
   );
 
-  const filter = { batchId: '', status: 'unreviewed', kind: '', text: '' };
+  const filter = { batchId: '', status: 'unreviewed', kind: '', text: '', nameMatch: false };
   const selection = new Set();
   const listHost = el('div', {});
   const selectionBar = el('div', { class: 'toolbar', style: { minHeight: '1.8rem' } });
@@ -36,6 +54,7 @@ export async function renderInbox() {
       status: filter.status || undefined,
       kind: filter.kind || undefined,
       text: filter.text || undefined,
+      nameMatch: filter.nameMatch || undefined,
     });
     selection.clear();
     renderSelectionBar();
@@ -57,6 +76,7 @@ export async function renderInbox() {
   const inboxRow = (item) => {
     const checkbox = el('input', {
       type: 'checkbox',
+      dataset: { itemId: item.id },
       'aria-label': `Select ${item.filename}`,
       onclick: (e) => e.stopPropagation(),
       onchange: (e) => {
@@ -79,6 +99,7 @@ export async function renderInbox() {
         el('div', { class: 'row-sub' },
           [item.sourceRelPath, formatBytes(item.size), item.batchLabel].filter(Boolean).join(' · ')),
         item.status === 'error' ? el('div', { class: 'row-sub state-bad' }, item.errorMessage) : null,
+        item.nameMatch ? nameMatchNote(item.nameMatch) : null,
       ),
       el('div', { class: 'row-side' },
         item.status === 'unreviewed' ? '' : item.status,
@@ -96,6 +117,19 @@ export async function renderInbox() {
   const renderSelectionBar = () => {
     clear(selectionBar);
     if (readOnly) return;
+    const allSelected = items.length > 0 && items.every((item) => selection.has(item.id));
+    selectionBar.append(el('button', {
+      class: 'btn',
+      disabled: items.length === 0,
+      onclick: () => {
+        if (allSelected) selection.clear();
+        else for (const item of items) selection.add(item.id);
+        for (const checkbox of listHost.querySelectorAll('input[type="checkbox"][data-item-id]')) {
+          checkbox.checked = selection.has(checkbox.dataset.itemId);
+        }
+        renderSelectionBar();
+      },
+    }, allSelected ? 'Clear selection' : 'Select all'));
     if (selection.size === 0) {
       selectionBar.append(el('span', { class: 'section-note' }, 'Select rows to file several at once.'));
       return;
@@ -107,15 +141,15 @@ export async function renderInbox() {
       el('button', {
         class: 'btn',
         onclick: async () => {
-          for (const item of chosen) await callSafe('inbox.setStatus', { id: item.id, status: 'ignored' });
-          render(); refreshCounts();
+          const result = await callSafe('inbox.setStatuses', { ids: chosen.map((item) => item.id), status: 'ignored' });
+          if (result) { render(); refreshCounts(); }
         },
       }, 'Ignore'),
       el('button', {
         class: 'btn',
         onclick: async () => {
-          for (const item of chosen) await callSafe('inbox.setStatus', { id: item.id, status: 'duplicate' });
-          render(); refreshCounts();
+          const result = await callSafe('inbox.setStatuses', { ids: chosen.map((item) => item.id), status: 'duplicate' });
+          if (result) { render(); refreshCounts(); }
         },
       }, 'Mark duplicate'),
     );
@@ -142,7 +176,7 @@ export async function renderInbox() {
         targetBtn.textContent = picked ? picked.name : 'No record — file loose';
       };
       targetBtn.addEventListener('click', async () => {
-        const picked = await pickEntity({ title: 'Assign to which record?' });
+        const picked = await pickEntity({ title: 'Assign to which record?', worldCharacterFilter: true });
         if (picked) chooseTarget(picked);
       });
 
@@ -181,6 +215,33 @@ export async function renderInbox() {
         }, 'Create a new record from this item →'),
       );
 
+      /**
+       * One item carrying a name the library already uses is nearly always
+       * newer art for that asset, not a second asset. Filing it as a version
+       * keeps the crops, links, and published packages pointing at one thing.
+       */
+      const match = fileable.length === 1 && fileable[0].kind !== 'markdown' ? fileable[0].nameMatch : null;
+      const newVersionBlock = match
+        ? el('div', { class: 'section', style: { margin: '0.8rem 0' } },
+          el('span', { class: 'eyebrow' }, 'Already in the library'),
+          el('p', { class: 'section-note' },
+            `An asset is already titled “${match.title}”${match.status === 'archived' ? ' (archived)' : ''}. Filing this as a new version keeps its associations, crops, and history — earlier bytes are never overwritten.`),
+          el('p', { style: { marginTop: '0.5rem' } },
+            el('button', {
+              class: 'btn', type: 'button',
+              onclick: async () => {
+                const result = await callSafe('inbox.fileAsNewVersion', { id: fileable[0].id, assetId: match.assetId });
+                if (result) {
+                  showToast(`Filed as version ${result.asset.versions.length} of “${match.title}”.`, 'good');
+                  close();
+                  render();
+                  refreshCounts();
+                }
+              },
+            }, `File as a new version of “${match.title}” →`)),
+        )
+        : null;
+
       return el('form', {
         onsubmit: async (e) => {
           e.preventDefault();
@@ -211,6 +272,7 @@ export async function renderInbox() {
       },
         el('h2', {}, fileable.length === 1 ? `File “${fileable[0].filename}”` : `File ${fileable.length} items`),
         excerpt ? el('div', { class: 'editor-surface', style: { margin: '0.8rem 0', maxHeight: '10rem', overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: '0.85rem' } }, excerpt) : null,
+        newVersionBlock,
         suggestionsBlock,
         field('Assign to', targetBtn, { hint: 'Media becomes a managed asset; Markdown becomes a linked document.' }),
         createNewBlock,
@@ -280,6 +342,14 @@ export async function renderInbox() {
         ],
         onChange: (value) => { filter.kind = value; render(); },
       }),
+    ),
+    el('label', { style: { display: 'flex', gap: '0.4rem', alignItems: 'center' } },
+      el('input', {
+        type: 'checkbox',
+        'aria-label': 'Only items whose name an asset already uses',
+        onchange: (e) => { filter.nameMatch = e.target.checked; render(); },
+      }),
+      'Name already in the library',
     ),
   );
 

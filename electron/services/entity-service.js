@@ -4,13 +4,13 @@ import { nowIso, inTransaction } from './database-service.js';
 import { recordActivity } from './activity-service.js';
 import { syncEntityIndex, syncDocumentIndex, syncAssetIndex, removeFromIndex, syncRelationshipIndex } from './search-service.js';
 import { slugify } from './paths.js';
-import { assetDisplayUrl } from './asset-service.js';
+import { assetDisplayUrl, generateRendition } from './asset-service.js';
 
 export const ENTITY_TYPES = ['world', 'character', 'location', 'group', 'species', 'object', 'event', 'lore'];
 export const ENTRY_TYPES = ['location', 'group', 'species', 'object', 'event', 'lore'];
 
 const WORLD_PROFILE_FIELDS = ['tagline', 'genre', 'tone', 'setting_description', 'visual_direction', 'cover_asset_id', 'background_asset_id'];
-const CHARACTER_PROFILE_FIELDS = ['role', 'age_text', 'appearance', 'personality', 'biography', 'voice', 'portrait_asset_id', 'full_body_asset_id'];
+const CHARACTER_PROFILE_FIELDS = ['role', 'age_text', 'appearance', 'personality', 'biography', 'voice', 'portrait_asset_id', 'tile_asset_id'];
 
 /** Generate a slug unique within the entity type namespace. */
 function uniqueSlug(db, type, name, excludeId = null) {
@@ -217,14 +217,18 @@ export function listEntities(library, { type, types, worldId, status, tagId, lim
 }
 
 /** Preferred art for browsing: world cover or character portrait. */
-function preferredArtUrl(db, type, id) {
+export function preferredArtAsset(db, type, id, slot = null) {
   if (type === 'world') {
     const profile = db.prepare('SELECT cover_asset_id, background_asset_id FROM world_profiles WHERE entity_id = ?').get(id);
-    return assetDisplayUrl(db, profile?.cover_asset_id) ?? assetDisplayUrl(db, profile?.background_asset_id);
+    const role = slot === 'background' ? 'world.background' : 'world.cover';
+    const preferred = role === 'world.background' ? profile?.background_asset_id : profile?.cover_asset_id;
+    return availablePreferred(db, preferred, id, role) ?? roleFallback(db, id, [role]);
   }
   if (type === 'character') {
-    const profile = db.prepare('SELECT portrait_asset_id, full_body_asset_id FROM character_profiles WHERE entity_id = ?').get(id);
-    return assetDisplayUrl(db, profile?.portrait_asset_id) ?? assetDisplayUrl(db, profile?.full_body_asset_id);
+    const profile = db.prepare('SELECT portrait_asset_id, tile_asset_id FROM character_profiles WHERE entity_id = ?').get(id);
+    const role = slot === 'tile' ? 'character.tile' : 'character.portrait';
+    const preferred = role === 'character.tile' ? profile?.tile_asset_id : profile?.portrait_asset_id;
+    return availablePreferred(db, preferred, id, role) ?? roleFallback(db, id, [role]);
   }
   const linked = db.prepare(`
     SELECT l.asset_id FROM asset_links l
@@ -232,7 +236,37 @@ function preferredArtUrl(db, type, id) {
     WHERE l.entity_id = ? AND a.kind = 'image' AND a.status = 'active'
     ORDER BY l.position LIMIT 1
   `).get(id);
-  return assetDisplayUrl(db, linked?.asset_id);
+  return linked?.asset_id ?? null;
+}
+
+function availablePreferred(db, assetId, entityId, role) {
+  if (!assetId) return null;
+  return db.prepare(`
+    SELECT a.id FROM assets a JOIN asset_links l ON l.asset_id = a.id
+    WHERE a.id = ? AND a.kind = 'image' AND a.status = 'active' AND l.entity_id = ? AND l.role = ?
+  `).get(assetId, entityId, role)?.id ?? null;
+}
+
+function roleFallback(db, entityId, roles) {
+  return db.prepare(`
+    SELECT a.id FROM asset_links l JOIN assets a ON a.id = l.asset_id
+    WHERE l.entity_id = ? AND l.role IN (${roles.map(() => '?').join(',')})
+      AND a.kind = 'image' AND a.status = 'active'
+    ORDER BY CASE l.role ${roles.map((role, i) => `WHEN '${role}' THEN ${i}`).join(' ')} END, l.position, l.id
+    LIMIT 1
+  `).get(entityId, ...roles)?.id ?? null;
+}
+
+export function preferredArtUrl(db, type, id, recipeId = null, slot = null) {
+  return assetDisplayUrl(db, preferredArtAsset(db, type, id, slot), recipeId);
+}
+
+export async function preferredRendition(library, type, id, recipeId, slot = null) {
+  const assetId = preferredArtAsset(library.db, type, id, slot);
+  if (!assetId) return { assetId: null, url: null };
+  const asset = library.db.prepare('SELECT current_version_id FROM assets WHERE id = ?').get(assetId);
+  const rendition = await generateRendition(library, asset.current_version_id, recipeId);
+  return { assetId, versionId: asset.current_version_id, recipeId, url: rendition.url };
 }
 
 /** Everything that references this entity, for Usage views and archive confirmations. */

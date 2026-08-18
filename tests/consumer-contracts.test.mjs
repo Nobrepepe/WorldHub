@@ -76,7 +76,7 @@ test('stickeralbum package carries 10 slots, itemFields, packs with nested distr
 
   assert.equal(content.values.packs.length, 2);
   assert.equal(content.values.packs[0].pack_distribution[0].dist_selector, 'standard');
-  assert.ok(index.some((entry) => entry.assetId === built.packArt.id && entry.recipeId === 'card_3x4'), 'pack art assetRef packaged with its recipe');
+  assert.ok(index.some((entry) => entry.assetId === built.packArt.id && entry.recipeId === 'portrait_3x4'), 'pack art assetRef packaged with its recipe');
 });
 
 test('herocollector package carries nested campaign, archive, expedition, and crisis structures with their art', async (t) => {
@@ -95,7 +95,7 @@ test('herocollector package carries nested campaign, archive, expedition, and cr
   assert.equal(worldValues.hc_archive_collections[0].col_relics.length, 5, 'five relics each');
   assert.equal(worldValues.hc_archive_collections[0].col_reward_character, built.perCharacter[0].hero.id);
   assert.ok(index.some((entry) => entry.assetId === built.relicArt.id), 'relic art from a nested list is packaged');
-  assert.ok(index.some((entry) => entry.assetId === built.crisisArt.id && entry.recipeId === 'landscape_16x9'), 'crisis art packaged with its recipe');
+  assert.ok(index.some((entry) => entry.assetId === built.crisisArt.id && entry.recipeId === 'tile_16x9'), 'crisis art packaged with its recipe');
 
   assert.equal(content.values.hc_crises[0].crisis_fronts.length, 3);
   assert.equal(content.values.hc_crises[0].crisis_world, worldId);

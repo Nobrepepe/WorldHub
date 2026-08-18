@@ -53,7 +53,7 @@ Concept groups (see the migration files for exact columns):
 - **Canon** — `entities` (all eight types share one base table), `world_profiles`, `character_profiles`, `entity_aliases`, `relationships` (directed), `tags`, `taggings`.
 - **Documents** — `documents` (the .md file is canonical; `content_cache` exists for indexing and recovery only), `document_links` (many entities per document).
 - **Assets** — `blobs` (content-addressed by sha-256), `assets` (logical), `asset_versions` (immutable), `asset_links` (entity + semantic role), `rendition_recipes`, `asset_crops`, `generated_renditions`.
-- **Inbox** — `inbox_batches`, `inbox_items` (with source-relative provenance).
+- **Inbox** — `inbox_batches`, `inbox_items` (with source-relative provenance and a `name_key` that matches `assets.title_key` for duplicate-name hints).
 - **Distribution** — `application_contracts` (versioned JSON), `productions`, `production_entities`, `production_values` (the only JSON-valued table), `production_asset_sets`, `production_asset_items`, `publications`, `publication_files`.
 - **Operational** — `settings`, `activity_log` (bounded), `schema_migrations`, and the `search_index` FTS5 table.
 

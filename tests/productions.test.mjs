@@ -9,11 +9,12 @@ import {
 } from '../electron/services/contract-service.js';
 import {
   createProduction, getProduction, setProductionValue, setSelection, setAssetSetItems,
-  validateProduction, setProductionStatus,
+  validateProduction, setProductionStatus, planProductionRebind, rebindProduction, rebindTargets,
 } from '../electron/services/production-service.js';
 import { createEntity, updateEntity } from '../electron/services/entity-service.js';
 import { importAsset, setAssetLinks } from '../electron/services/asset-service.js';
 import { validateFieldValue } from '../electron/services/field-engine.js';
+import { publishProduction } from '../electron/services/publication-service.js';
 
 const exampleContract = () => JSON.parse(fs.readFileSync(EXAMPLE_CONTRACT_PATH, 'utf8'));
 
@@ -193,4 +194,80 @@ test('readiness is blocked by errors but not by warnings', async (t) => {
   // Editing content returns it to draft.
   setProductionValue(library, production.id, { scope: 'production', field: 'gallery_title', value: 'Renamed Gallery' });
   assert.equal(getProduction(library, production.id).status, 'draft');
+});
+
+test('a production moves to a new contract version, keeping what the version still recognises', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const { contract, world, nao, portrait, production } = await galleryFixture(library);
+
+  setProductionValue(library, production.id, { scope: 'production', field: 'gallery_title', value: 'The Vel Cast' });
+  setSelection(library, production.id, 'world', [world.id]);
+  setSelection(library, production.id, 'cast', [nao.id]);
+  setAssetSetItems(library, production.id, { slot: 'portrait', entityId: nao.id, items: [{ assetId: portrait.id }] });
+  assert.equal(validateProduction(library, production.id).errors, 0);
+
+  // A version that only adds a field: nothing is released.
+  const grown = exampleContract();
+  grown.productionFields.push({ id: 'subtitle', label: 'Subtitle', type: 'shortText' });
+  updateContract(library, contract.contractId, grown);
+
+  const targets = rebindTargets(library, production.id);
+  assert.equal(targets.current.version, 1);
+  assert.equal(targets.latestOwnVersion, 2, 'the newer version is offered');
+
+  let plan = planProductionRebind(library, production.id, { contractVersion: 2 });
+  assert.deepEqual(plan.losses, [], 'an added field releases nothing');
+  assert.ok(plan.additions.some((line) => line.includes('subtitle')));
+
+  let moved = rebindProduction(library, production.id, { contractVersion: 2 });
+  assert.equal(moved.contractVersion, 2);
+  assert.equal(moved.values.gallery_title, 'The Vel Cast', 'production values survive');
+  assert.equal(moved.selections.cast[0].id, nao.id, 'selections survive');
+  assert.equal(moved.assetSets[`portrait:${nao.id}`][0].assetId, portrait.id, 'asset sets survive');
+  assert.equal(moved.status, 'draft');
+  assert.equal(validateProduction(library, production.id).errors, 0, 'still valid on the new version');
+
+  // A version that drops a field and a selection: both are named, then released.
+  const shrunk = exampleContract();
+  shrunk.productionFields = shrunk.productionFields.filter((def) => def.id !== 'gallery_title');
+  shrunk.entitySelections = shrunk.entitySelections.filter((sel) => sel.id !== 'cast');
+  updateContract(library, contract.contractId, shrunk);
+
+  plan = planProductionRebind(library, production.id, { contractVersion: 3 });
+  assert.ok(plan.losses.some((line) => line.includes('gallery_title')), plan.losses.join(' | '));
+  assert.ok(plan.losses.some((line) => line.includes('Nao')), 'the released record is named');
+
+  moved = rebindProduction(library, production.id, { contractVersion: 3 });
+  assert.equal(moved.contractVersion, 3);
+  assert.equal(moved.values.gallery_title, undefined, 'the dropped field is cleared');
+  assert.equal(moved.selections.cast, undefined, 'the dropped selection is gone');
+  assert.equal(moved.selections.world[0].id, world.id, 'the surviving selection is untouched');
+  assert.equal(
+    library.db.prepare('SELECT COUNT(*) n FROM production_asset_sets WHERE production_id = ?').get(production.id).n,
+    0,
+    'the released record takes its asset sets with it',
+  );
+
+  assert.throws(() => rebindProduction(library, production.id, { contractVersion: 3 }), /already on that contract version/);
+});
+
+test('moving to another contract version leaves published snapshots alone', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const { contract, world, nao, portrait, production } = await galleryFixture(library);
+
+  setProductionValue(library, production.id, { scope: 'production', field: 'gallery_title', value: 'Gallery' });
+  setSelection(library, production.id, 'world', [world.id]);
+  setSelection(library, production.id, 'cast', [nao.id]);
+  setAssetSetItems(library, production.id, { slot: 'portrait', entityId: nao.id, items: [{ assetId: portrait.id }] });
+  setProductionStatus(library, production.id, 'ready');
+  const published = await publishProduction(library, production.id);
+
+  updateContract(library, contract.contractId, { ...exampleContract(), name: 'Gallery v2' });
+  rebindProduction(library, production.id, { contractVersion: 2 });
+
+  const row = library.db.prepare('SELECT contract_version FROM publications WHERE id = ?').get(published.id);
+  assert.equal(row.contract_version, 1, 'the snapshot still records the version it shipped with');
+  assert.equal(getProduction(library, production.id).contractVersion, 2);
 });

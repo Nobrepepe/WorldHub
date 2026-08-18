@@ -87,6 +87,7 @@ function renderShell() {
         update({ library });
         applyLibrarySettings(settings);
         renderShell();
+        installRouter(mainHost, syncNav);
         if (!location.hash || location.hash === '#') location.hash = '/home';
         renderCurrent();
         refreshCounts();

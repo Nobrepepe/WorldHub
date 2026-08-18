@@ -53,12 +53,12 @@
           "label": "Portrait",
           "kinds": ["image"],
           "roles": ["character.portrait"],
-          "recipes": ["card_3x4", "thumbnail_square"],
+          "recipes": ["portrait_3x4", "thumbnail_square"],
           "exact": 1
         }
       ]
     }
   ],
   "documents": { "mode": "linked" },
-  "requiredRecipes": ["card_3x4", "thumbnail_square"]
+  "requiredRecipes": ["portrait_3x4", "thumbnail_square"]
 }

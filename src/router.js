@@ -44,11 +44,19 @@ export async function navigate(path) {
 
 let renderHost = null;
 let onAfterRender = null;
+let listenerInstalled = false;
+
+function onHashChange() {
+  renderCurrent().catch(console.error);
+}
 
 export function installRouter(host, afterRender) {
   renderHost = host;
   onAfterRender = afterRender;
-  window.addEventListener('hashchange', () => { renderCurrent().catch(console.error); });
+  if (!listenerInstalled) {
+    window.addEventListener('hashchange', onHashChange);
+    listenerInstalled = true;
+  }
 }
 
 export async function renderCurrent() {
@@ -64,6 +72,14 @@ export async function renderCurrent() {
   }
 
   const target = match ?? matchRoute('/home');
+
+  /* Re-rendering the screen you are already on is a refresh, not a
+     journey: an editor that commits and redraws must leave the author
+     looking at the same place on the page. */
+  const scroller = renderHost.parentElement;
+  const sameScreen = state.route?.path === path;
+  const keptScroll = sameScreen ? scroller?.scrollTop ?? 0 : null;
+
   update({ route: { name: target.route.pattern, params: target.params, path } });
 
   const view = document.createElement('div');
@@ -79,7 +95,8 @@ export async function renderCurrent() {
     view.append(fail);
   }
   renderHost.replaceChildren(view);
-  renderHost.parentElement?.scrollTo?.(0, 0);
+  if (keptScroll === null) scroller?.scrollTo?.(0, 0);
+  else if (scroller) scroller.scrollTop = keptScroll;
   onAfterRender?.();
 
   // Restore keyboard focus to the main document for accessibility.

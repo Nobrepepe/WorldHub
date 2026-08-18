@@ -82,7 +82,7 @@
           "type": "assetRef",
           "required": false,
           "assetKinds": ["image"],
-          "recipes": ["card_3x4"]
+          "recipes": ["portrait_3x4"]
         },
         {
           "id": "pack_distribution",
@@ -138,7 +138,7 @@
           "label": "Character portrait",
           "kinds": ["image"],
           "roles": ["character.portrait"],
-          "recipes": ["card_3x4", "thumbnail_square"],
+          "recipes": ["portrait_3x4", "thumbnail_square"],
           "min": 0,
           "max": 1,
           "hint": "Shown on the character's album page header."
@@ -148,7 +148,7 @@
           "label": "Sticker slots — ten, in order",
           "kinds": ["image"],
           "roles": ["character.collectible"],
-          "recipes": ["card_3x4", "thumbnail_square"],
+          "recipes": ["portrait_3x4", "thumbnail_square"],
           "exact": 10,
           "hint": "Slot rarity is fixed by position: 1–3 common, 4–6 uncommon, 7–8 rare, 9 epic, 10 legendary.",
           "itemFields": [
@@ -185,11 +185,11 @@
       "label": "Collection cover",
       "kinds": ["image"],
       "roles": ["scene.key_art"],
-      "recipes": ["landscape_16x9"],
+      "recipes": ["tile_16x9"],
       "min": 0,
       "max": 1
     }
   ],
   "documents": { "mode": "none" },
-  "requiredRecipes": ["card_3x4", "thumbnail_square", "landscape_16x9"]
+  "requiredRecipes": ["portrait_3x4", "thumbnail_square", "tile_16x9"]
 }

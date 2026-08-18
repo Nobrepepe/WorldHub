@@ -213,6 +213,213 @@ export function setAssetSetItems(library, id, { slot, entityId = '', items }) {
   return getProduction(library, id);
 }
 
+/* ---------------- moving to another contract version ---------------- */
+
+/** The parts of a contract a production's stored rows are keyed by. */
+function contractShape(contractJson) {
+  const productionFields = new Set((contractJson.productionFields ?? []).map((def) => def.id));
+  const selections = new Map();
+  const entityFieldOwner = new Map();
+  const assetSets = new Map();
+  for (const selection of contractJson.entitySelections ?? []) {
+    selections.set(selection.id, selection);
+    for (const def of selection.fields ?? []) entityFieldOwner.set(def.id, selection.id);
+    for (const set of selection.assetSets ?? []) assetSets.set(set.id, { scope: 'entity', owner: selection.id, def: set });
+  }
+  for (const set of contractJson.assetSets ?? []) {
+    assetSets.set(set.id, { scope: 'production', owner: null, def: set });
+  }
+  return {
+    productionFields,
+    selections,
+    entityFieldOwner,
+    assetSets,
+    documentsSelected: contractJson.documents?.mode === 'selected',
+  };
+}
+
+/**
+ * Work out exactly what moving a production onto another contract
+ * version would keep and what it would let go. The same function
+ * computes the preview and drives the change, so what the author is
+ * shown and what happens cannot drift apart.
+ */
+function buildRebindPlan(db, row, target) {
+  const id = row.id;
+  const shape = contractShape(target.contract);
+  const plan = {
+    deleteEntities: [], deleteSetIds: [], deleteValueIds: [], itemValueUpdates: [],
+    losses: [], additions: [],
+  };
+
+  /* selected records */
+  const entityRows = db.prepare(`
+    SELECT pe.slot, pe.entity_id AS entityId, e.name, e.type
+    FROM production_entities pe JOIN entities e ON e.id = pe.entity_id
+    WHERE pe.production_id = ? ORDER BY pe.slot, pe.position
+  `).all(id);
+  const surviving = new Set();
+  const droppedBySlot = new Map();
+  for (const entity of entityRows) {
+    const selection = shape.selections.get(entity.slot);
+    if (selection && selection.entityTypes.includes(entity.type)) {
+      surviving.add(`${entity.slot}:${entity.entityId}`);
+      continue;
+    }
+    plan.deleteEntities.push(entity);
+    if (!droppedBySlot.has(entity.slot)) {
+      droppedBySlot.set(entity.slot, {
+        label: selection ? selection.label : entity.slot,
+        reason: selection ? `no longer accepts ${entity.type} records` : 'is not in the new version',
+        names: [],
+      });
+    }
+    droppedBySlot.get(entity.slot).names.push(entity.name);
+  }
+  for (const { label, reason, names } of droppedBySlot.values()) {
+    plan.losses.push(`“${label}” ${reason}: ${names.length} chosen record(s) are released (${names.slice(0, 4).join(', ')}${names.length > 4 ? ', …' : ''}).`);
+  }
+
+  /* asset sets, and the item values inside the ones that survive */
+  for (const setRow of db.prepare('SELECT * FROM production_asset_sets WHERE production_id = ?').all(id)) {
+    const known = shape.assetSets.get(setRow.slot);
+    const scopeMatches = known && (setRow.entity_id === ''
+      ? known.scope === 'production'
+      : known.scope === 'entity' && surviving.has(`${known.owner}:${setRow.entity_id}`));
+    const items = db.prepare('SELECT id, asset_id, value_json FROM production_asset_items WHERE set_id = ?').all(setRow.id);
+    if (!scopeMatches) {
+      plan.deleteSetIds.push(setRow.id);
+      if (items.length > 0) {
+        plan.losses.push(`The asset set “${setRow.slot}”${setRow.entity_id ? ' for one record' : ''} is gone from the new version: ${items.length} chosen asset(s) are released.`);
+      }
+      continue;
+    }
+    const allowed = new Set((known.def.itemFields ?? []).map((def) => def.id));
+    for (const item of items) {
+      const values = JSON.parse(item.value_json);
+      const stale = Object.keys(values).filter((key) => !allowed.has(key));
+      if (stale.length === 0) continue;
+      const kept = Object.fromEntries(Object.entries(values).filter(([key]) => allowed.has(key)));
+      plan.itemValueUpdates.push({ id: item.id, valueJson: JSON.stringify(kept) });
+      plan.losses.push(`“${setRow.slot}” no longer has the per-asset field(s) ${stale.join(', ')}; those entries are cleared.`);
+    }
+  }
+
+  /* stored values */
+  for (const valueRow of db.prepare('SELECT * FROM production_values WHERE production_id = ?').all(id)) {
+    const kept = valueRow.scope === 'production'
+      ? shape.productionFields.has(valueRow.field) || (valueRow.field === '__documents__' && shape.documentsSelected)
+      : (() => {
+        const owner = shape.entityFieldOwner.get(valueRow.field);
+        return Boolean(owner) && surviving.has(`${owner}:${valueRow.entity_id}`);
+      })();
+    if (kept) continue;
+    plan.deleteValueIds.push(valueRow.id);
+    if (JSON.parse(valueRow.value_json) === null) continue;
+    plan.losses.push(valueRow.scope === 'production'
+      ? `The production field “${valueRow.field}” is gone from the new version; its value is cleared.`
+      : `The per-record field “${valueRow.field}” no longer applies to one selected record; its value is cleared.`);
+  }
+
+  /* what the new version asks for that the old one never did */
+  const before = contractShape(JSON.parse(db.prepare('SELECT json FROM application_contracts WHERE contract_id = ? AND version = ?')
+    .get(row.contract_id, row.contract_version)?.json ?? '{}'));
+  for (const fieldId of shape.productionFields) {
+    if (!before.productionFields.has(fieldId)) plan.additions.push(`New production field “${fieldId}”.`);
+  }
+  for (const [slotId, selection] of shape.selections) {
+    if (!before.selections.has(slotId)) plan.additions.push(`New record selection “${selection.label}”.`);
+  }
+  for (const [setId, set] of shape.assetSets) {
+    if (!before.assetSets.has(setId)) plan.additions.push(`New asset set “${set.def.label}”.`);
+  }
+
+  return plan;
+}
+
+/** Candidate contracts and versions this production could be moved onto. */
+export function rebindTargets(library, id) {
+  const db = library.db;
+  const row = db.prepare('SELECT * FROM productions WHERE id = ?').get(id);
+  if (!row) throw domainError('production.missing', 'That production no longer exists.');
+  const rows = db.prepare(`
+    SELECT contract_id, version, name, app_type, status FROM application_contracts
+    ORDER BY name COLLATE NOCASE, version DESC
+  `).all();
+  const contracts = new Map();
+  for (const contract of rows) {
+    if (!contracts.has(contract.contract_id)) {
+      contracts.set(contract.contract_id, {
+        contractId: contract.contract_id, name: contract.name, appType: contract.app_type,
+        status: contract.status, versions: [],
+      });
+    }
+    contracts.get(contract.contract_id).versions.push(contract.version);
+  }
+  const list = [...contracts.values()];
+  const own = list.find((contract) => contract.contractId === row.contract_id);
+  return {
+    current: { contractId: row.contract_id, version: row.contract_version },
+    latestOwnVersion: own?.versions[0] ?? row.contract_version,
+    contracts: list,
+  };
+}
+
+/** Preview only: what a move would keep, release, and newly ask for. */
+export function planProductionRebind(library, id, { contractId = null, contractVersion = null }) {
+  const db = library.db;
+  const row = db.prepare('SELECT * FROM productions WHERE id = ?').get(id);
+  if (!row) throw domainError('production.missing', 'That production no longer exists.');
+  const target = getContract(library, contractId ?? row.contract_id, contractVersion);
+  const plan = buildRebindPlan(db, row, target);
+  const from = getContract(library, row.contract_id, row.contract_version);
+  return {
+    from: { contractId: row.contract_id, version: row.contract_version, name: from.name },
+    to: { contractId: target.contractId, version: target.version, name: target.name },
+    unchanged: row.contract_id === target.contractId && row.contract_version === target.version,
+    differentContract: row.contract_id !== target.contractId,
+    losses: plan.losses,
+    additions: plan.additions,
+    publications: db.prepare('SELECT COUNT(*) n FROM publications WHERE production_id = ?').get(id).n,
+  };
+}
+
+/**
+ * Move a production onto another contract version, or another contract
+ * entirely. Everything the new version still recognises is kept in
+ * place; nothing is re-minted. Published snapshots are untouched — they
+ * record the contract version they shipped with.
+ */
+export function rebindProduction(library, id, { contractId = null, contractVersion = null }) {
+  const db = library.db;
+  const row = db.prepare('SELECT * FROM productions WHERE id = ?').get(id);
+  if (!row) throw domainError('production.missing', 'That production no longer exists.');
+  const target = getContract(library, contractId ?? row.contract_id, contractVersion);
+  if (row.contract_id === target.contractId && row.contract_version === target.version) {
+    throw domainError('production.rebind_same', 'This production is already on that contract version.');
+  }
+  const plan = buildRebindPlan(db, row, target);
+
+  inTransaction(db, () => {
+    const dropEntity = db.prepare('DELETE FROM production_entities WHERE production_id = ? AND slot = ? AND entity_id = ?');
+    for (const entity of plan.deleteEntities) dropEntity.run(id, entity.slot, entity.entityId);
+    const dropSet = db.prepare('DELETE FROM production_asset_sets WHERE id = ?');
+    for (const setId of plan.deleteSetIds) dropSet.run(setId);
+    const dropValue = db.prepare('DELETE FROM production_values WHERE id = ?');
+    for (const valueId of plan.deleteValueIds) dropValue.run(valueId);
+    const setItemValues = db.prepare('UPDATE production_asset_items SET value_json = ? WHERE id = ?');
+    for (const update of plan.itemValueUpdates) setItemValues.run(update.valueJson, update.id);
+    db.prepare('UPDATE productions SET contract_id = ?, contract_version = ? WHERE id = ?')
+      .run(target.contractId, target.version, id);
+    touch(db, library, id);
+  });
+
+  recordActivity(db, 'production.rebound', 'production', id,
+    `${target.name} v${target.version}`);
+  validateProduction(library, id);
+  return getProduction(library, id);
+}
+
 /* ---------------- validation ---------------- */
 
 /**
@@ -273,14 +480,14 @@ export function validateProduction(library, id) {
     for (const entity of chosen) {
       if (!selection.entityTypes.includes(entity.type)) {
         push('error', 'production.selection_type', `“${entity.name}” is a ${entity.type}, which “${selection.label}” does not allow.`,
-          { kind: 'selection', slot: selection.id, entityId: entity.id }, `selection:${selection.id}`);
+          { kind: 'selection', slot: selection.id, entityId: entity.id }, `selection:${selection.id}:${entity.id}`);
       }
       if (entity.status === 'archived') {
         push('error', 'production.selection_archived', `“${entity.name}” is archived and cannot be selected.`,
-          { kind: 'selection', slot: selection.id, entityId: entity.id }, `selection:${selection.id}`);
+          { kind: 'selection', slot: selection.id, entityId: entity.id }, `selection:${selection.id}:${entity.id}`);
       } else if (entity.status === 'draft') {
         push('warning', 'production.selection_draft', `“${entity.name}” is still a draft.`,
-          { kind: 'selection', slot: selection.id, entityId: entity.id }, `selection:${selection.id}`);
+          { kind: 'selection', slot: selection.id, entityId: entity.id }, `selection:${selection.id}:${entity.id}`);
       }
 
       /* per-entity fields */
@@ -288,7 +495,7 @@ export function validateProduction(library, id) {
         const value = production.entityValues[entity.id]?.[def.id];
         for (const problem of validateFieldValue(def, value, refs)) {
           push('error', problem.code, `${entity.name}: ${problem.message}`,
-            { kind: 'entityField', slot: selection.id, entityId: entity.id, field: def.id }, `selection:${selection.id}`);
+            { kind: 'entityField', slot: selection.id, entityId: entity.id, field: def.id }, `selection:${selection.id}:${entity.id}`);
         }
       }
 
@@ -296,7 +503,7 @@ export function validateProduction(library, id) {
       for (const set of selection.assetSets ?? []) {
         validateAssetSet(set, production.assetSets[setKey(set.id, entity.id)] ?? [], {
           db, refs, push, entity, selection,
-          destination: `selection:${selection.id}`,
+          destination: `assetset:${set.id}:${entity.id}`,
         });
       }
     }

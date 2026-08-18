@@ -5,6 +5,7 @@ import {
   archiveEntity, restoreEntity,
   createRelationship, updateRelationship, deleteRelationship, listRelationships, listRelationshipTypes,
   listTags, setSubjectTags, tagsFor,
+  preferredRendition,
 } from '../../services/entity-service.js';
 import { rebuildSearchIndex, searchLibrary } from '../../services/search-service.js';
 
@@ -24,6 +25,17 @@ register('entity.create', {
 register('entity.get', {
   payload: v.object({ id: v.uuid() }),
   handler: (ctx, { id }) => getEntity(ctx.library, id),
+});
+
+register('entity.preferredArt', {
+  payload: v.object({
+    id: v.uuid(), recipeId: v.string({ min: 1, max: 100 }),
+    slot: v.optional(v.enum(['cover', 'background', 'portrait', 'tile'])),
+  }),
+  handler: async (ctx, { id, recipeId, slot }) => {
+    const entity = getEntity(ctx.library, id);
+    return preferredRendition(ctx.library, entity.type, id, recipeId, slot);
+  },
 });
 
 register('entity.update', {
@@ -52,7 +64,7 @@ register('entity.update', {
       biography: v.optional(v.string({ max: 4000 })),
       voice: v.optional(v.string({ max: 4000 })),
       portraitAssetId: v.optional(v.nullable(v.uuid())),
-      fullBodyAssetId: v.optional(v.nullable(v.uuid())),
+      tileAssetId: v.optional(v.nullable(v.uuid())),
     })),
   }),
   handler: (ctx, { id, ...patch }) => updateEntity(ctx.library, id, patch),

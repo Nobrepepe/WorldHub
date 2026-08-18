@@ -6,7 +6,7 @@ import { nowIso, inTransaction } from './database-service.js';
 import { resolveInsideNoSymlink } from './paths.js';
 import { recordActivity } from './activity-service.js';
 import { classifyFile } from './file-signatures.js';
-import { importAsset } from './asset-service.js';
+import { importAsset, addAssetVersion, titleKey } from './asset-service.js';
 import { createDocument } from './document-service.js';
 
 /**
@@ -16,6 +16,15 @@ import { createDocument } from './document-service.js';
  */
 
 const IGNORED_NAMES = new Set(['.ds_store', 'thumbs.db', 'desktop.ini', '.directory']);
+
+/**
+ * What a file would be titled if filed as an asset, reduced to its
+ * comparison key. Filing derives the title from the filename stem, so
+ * this is the name the library would end up holding twice.
+ */
+function nameKey(filename) {
+  return titleKey(path.parse(filename).name);
+}
 
 function isIgnoredName(name) {
   return name.startsWith('.') || IGNORED_NAMES.has(name.toLowerCase());
@@ -58,10 +67,12 @@ export function importIntoInbox(library, sourcePaths, { label = '' } = {}) {
   db.prepare('INSERT INTO inbox_batches (id, label, source_root, imported_at) VALUES (?, ?, ?, ?)')
     .run(batchId, label || path.basename(sourceRoot), sourceRoot, now);
 
-  const insert = db.prepare(`
-    INSERT INTO inbox_items (id, batch_id, source_rel_path, filename, kind, size, checksum, staging_path, status, error_message, imported_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  const insertItem = db.prepare(`
+    INSERT INTO inbox_items (id, batch_id, source_rel_path, filename, kind, size, checksum, staging_path, status, error_message, name_key, imported_at)
+    VALUES (@id, @batchId, @sourceRelPath, @filename, @kind, @size, @checksum, @stagingPath, @status, @errorMessage, @nameKey, @importedAt)
   `);
+  /** The name key travels with the row, so duplicate hints are an indexed lookup. */
+  const insert = (values) => insertItem.run({ ...values, nameKey: nameKey(values.filename), importedAt: now });
   const checksumExists = db.prepare(`
     SELECT (SELECT COUNT(*) FROM inbox_items WHERE checksum = ? AND status != 'error') +
            (SELECT COUNT(*) FROM blobs WHERE hash = ?) AS n
@@ -77,14 +88,20 @@ export function importIntoInbox(library, sourcePaths, { label = '' } = {}) {
     try {
       buffer = fs.readFileSync(file.abs);
     } catch (err) {
-      insert.run(id, batchId, relSource, path.basename(file.abs), 'attachment', 0, '', '', 'error', `Could not read the file: ${err.message}`, now);
+      insert({
+        id, batchId, sourceRelPath: relSource, filename: path.basename(file.abs), kind: 'attachment',
+        size: 0, checksum: '', stagingPath: '', status: 'error', errorMessage: `Could not read the file: ${err.message}`,
+      });
       errors++;
       continue;
     }
     const info = classifyFile(path.basename(file.abs), buffer);
     if (!info) {
-      insert.run(id, batchId, relSource, path.basename(file.abs), 'attachment', buffer.length, '', '', 'error',
-        buffer.length === 0 ? 'The file is empty.' : 'The bytes do not match a supported format.', now);
+      insert({
+        id, batchId, sourceRelPath: relSource, filename: path.basename(file.abs), kind: 'attachment',
+        size: buffer.length, checksum: '', stagingPath: '', status: 'error',
+        errorMessage: buffer.length === 0 ? 'The file is empty.' : 'The bytes do not match a supported format.',
+      });
       errors++;
       continue;
     }
@@ -96,8 +113,11 @@ export function importIntoInbox(library, sourcePaths, { label = '' } = {}) {
     fs.mkdirSync(path.dirname(stagingAbs), { recursive: true });
     fs.writeFileSync(stagingAbs, buffer);
 
-    insert.run(id, batchId, relSource, path.basename(file.abs), info.kind, buffer.length, checksum, stagingRel,
-      isDuplicate ? 'duplicate' : 'unreviewed', '', now);
+    insert({
+      id, batchId, sourceRelPath: relSource, filename: path.basename(file.abs), kind: info.kind,
+      size: buffer.length, checksum, stagingPath: stagingRel,
+      status: isDuplicate ? 'duplicate' : 'unreviewed', errorMessage: '',
+    });
     if (isDuplicate) duplicates++;
     else imported++;
   }
@@ -140,7 +160,7 @@ export function listBatches(library) {
   `).all();
 }
 
-export function listInbox(library, { batchId, status, kind, text, folder, limit = 1000 } = {}) {
+export function listInbox(library, { batchId, status, kind, text, folder, nameMatch, limit = 1000 } = {}) {
   const db = library.db;
   const where = [];
   const args = [];
@@ -149,6 +169,9 @@ export function listInbox(library, { batchId, status, kind, text, folder, limit 
   if (kind) { where.push('i.kind = ?'); args.push(kind); }
   if (text) { where.push('(i.filename LIKE ? OR i.source_rel_path LIKE ?)'); args.push(`%${text}%`, `%${text}%`); }
   if (folder) { where.push('i.source_rel_path LIKE ?'); args.push(`${folder}%`); }
+  if (nameMatch) {
+    where.push(`i.kind != 'markdown' AND EXISTS (SELECT 1 FROM assets a WHERE a.title_key = i.name_key)`);
+  }
   const rows = db.prepare(`
     SELECT i.*, b.label AS batch_label FROM inbox_items i
     JOIN inbox_batches b ON b.id = i.batch_id
@@ -156,10 +179,45 @@ export function listInbox(library, { batchId, status, kind, text, folder, limit 
     ORDER BY i.imported_at DESC, i.source_rel_path
     LIMIT ?
   `).all(...args, limit);
-  return rows.map(itemView);
+  const matches = nameMatchesFor(db, rows);
+  return rows.map((row) => itemView(row, matches.get(row.id) ?? null));
 }
 
-function itemView(row) {
+/**
+ * Assets already carrying the name an item would be filed under. Markdown
+ * becomes a document, never an asset, so it is left out. Archived assets
+ * still count — a forgotten twin is exactly what a person needs to see
+ * before filing a second one. An active match is offered first.
+ */
+function nameMatchesFor(db, rows) {
+  const candidates = rows.filter((row) => row.kind !== 'markdown' && row.name_key && row.status !== 'filed');
+  const matches = new Map();
+  if (candidates.length === 0) return matches;
+
+  const keys = [...new Set(candidates.map((row) => row.name_key))];
+  const byKey = new Map();
+  const chunkSize = 400;
+  for (let start = 0; start < keys.length; start += chunkSize) {
+    const chunk = keys.slice(start, start + chunkSize);
+    const found = db.prepare(`
+      SELECT id, title, title_key, status, created_at FROM assets
+      WHERE title_key IN (${chunk.map(() => '?').join(',')})
+      ORDER BY (status = 'archived'), created_at, id
+    `).all(...chunk);
+    for (const asset of found) {
+      const existing = byKey.get(asset.title_key);
+      if (existing) existing.total++;
+      else byKey.set(asset.title_key, { assetId: asset.id, title: asset.title, status: asset.status, total: 1 });
+    }
+  }
+  for (const row of candidates) {
+    const match = byKey.get(row.name_key);
+    if (match) matches.set(row.id, match);
+  }
+  return matches;
+}
+
+function itemView(row, nameMatch = null) {
   return {
     id: row.id,
     batchId: row.batch_id,
@@ -177,6 +235,7 @@ function itemView(row) {
     importedAt: row.imported_at,
     previewUrl: row.staging_path ? `worldhub://media/inbox/${row.id}` : null,
     excerptAvailable: row.kind === 'markdown' && !!row.staging_path,
+    nameMatch,
   };
 }
 
@@ -226,6 +285,36 @@ export async function fileItemAsAsset(library, itemId, { title, entityId = null,
   return { item: itemView({ ...row, status: 'filed' }), asset };
 }
 
+/**
+ * File the item as a new version of an asset the library already holds —
+ * the usual answer when a name comes back with different bytes. Earlier
+ * versions stay, so crops, links, and published packages keep resolving.
+ */
+export async function fileItemAsNewVersion(library, itemId, { assetId, note = '' } = {}) {
+  const db = library.db;
+  const row = getReviewableItem(db, itemId);
+  if (row.kind === 'markdown') {
+    throw domainError('inbox.wrong_kind', 'Markdown items become documents, not asset versions.');
+  }
+  const target = db.prepare('SELECT id, title FROM assets WHERE id = ?').get(assetId);
+  if (!target) throw domainError('asset.missing', 'That asset no longer exists.');
+
+  const abs = resolveInsideNoSymlink(library.root, row.staging_path);
+  const buffer = fs.readFileSync(abs);
+  const asset = await addAssetVersion(library, assetId, {
+    buffer,
+    filename: row.filename,
+    importedFrom: row.source_rel_path,
+    note,
+  });
+  db.prepare(`
+    UPDATE inbox_items SET status = 'filed', filed_asset_id = ?, filed_asset_version_id = ?, filed_at = ?
+    WHERE id = ?
+  `).run(asset.id, asset.currentVersionId, nowIso(), itemId);
+  recordActivity(db, 'inbox.filed_version', 'asset', asset.id, `${row.filename} → ${target.title}`);
+  return { item: itemView({ ...row, status: 'filed' }), asset };
+}
+
 /** Turn a Markdown item into a linked canonical document. */
 export function fileItemAsDocument(library, itemId, { title, entityIds = [] } = {}) {
   const db = library.db;
@@ -260,6 +349,26 @@ export function setItemStatus(library, itemId, status) {
   return itemView({ ...row, status });
 }
 
+export function setItemsStatus(library, itemIds, status) {
+  if (!['unreviewed', 'duplicate', 'ignored'].includes(status)) {
+    throw domainError('inbox.bad_status', 'Unknown Inbox status.');
+  }
+  const uniqueIds = [...new Set(itemIds)];
+  inTransaction(library.db, () => {
+    const get = library.db.prepare('SELECT status FROM inbox_items WHERE id = ?');
+    const update = library.db.prepare('UPDATE inbox_items SET status = ? WHERE id = ?');
+    for (const id of uniqueIds) {
+      const row = get.get(id);
+      if (!row) throw domainError('inbox.missing', 'An Inbox item no longer exists.');
+      if (row.status === 'filed' || row.status === 'error') {
+        throw domainError('inbox.status_locked', 'Filed or errored Inbox items cannot change status.');
+      }
+      update.run(status, id);
+    }
+  });
+  return { updated: uniqueIds.length, status };
+}
+
 /**
  * Undo the most recent filing when no later dependency prevents it.
  * The staged copy still exists, so the item returns to review.
@@ -272,14 +381,44 @@ export function undoLastFiling(library) {
   `).get();
   if (!row) throw domainError('inbox.nothing_to_undo', 'No filing to undo.');
 
+  const filedVersion = row.filed_asset_version_id
+    ? db.prepare('SELECT * FROM asset_versions WHERE id = ?').get(row.filed_asset_version_id)
+    : null;
+  const wasNewVersionOfExistingAsset = !!filedVersion && filedVersion.version_number > 1;
+
   inTransaction(db, () => {
-    if (row.filed_asset_id) {
+    if (wasNewVersionOfExistingAsset) {
+      // The filing added a version, so undoing it removes that version
+      // and restores the one before. The asset and its earlier bytes stay.
+      const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(filedVersion.asset_id);
+      if (asset.current_version_id !== filedVersion.id) {
+        throw domainError('inbox.undo_blocked', 'That asset gained a newer version after this filing, so the filing cannot be undone.', {
+          assetId: asset.id,
+        });
+      }
+      const previous = db.prepare(`
+        SELECT id FROM asset_versions WHERE asset_id = ? AND version_number < ?
+        ORDER BY version_number DESC LIMIT 1
+      `).get(filedVersion.asset_id, filedVersion.version_number);
+      db.prepare('UPDATE assets SET current_version_id = ?, updated_at = ? WHERE id = ?')
+        .run(previous.id, nowIso(), filedVersion.asset_id);
+      db.prepare('DELETE FROM asset_crops WHERE version_id = ?').run(filedVersion.id);
+      db.prepare('DELETE FROM generated_renditions WHERE version_id = ?').run(filedVersion.id);
+      db.prepare('DELETE FROM asset_versions WHERE id = ?').run(filedVersion.id);
+      // The blob stays; the unreferenced-blob audit can reclaim it later.
+    } else if (row.filed_asset_id) {
       const assetId = row.filed_asset_id;
+      // Filing may have filled an empty preferred-art slot. Undoing that
+      // filing removes the asset, so clear preferences that point to it.
+      db.prepare('UPDATE world_profiles SET cover_asset_id = NULL WHERE cover_asset_id = ?').run(assetId);
+      db.prepare('UPDATE world_profiles SET background_asset_id = NULL WHERE background_asset_id = ?').run(assetId);
+      db.prepare('UPDATE character_profiles SET portrait_asset_id = NULL WHERE portrait_asset_id = ?').run(assetId);
+      db.prepare('UPDATE character_profiles SET tile_asset_id = NULL WHERE tile_asset_id = ?').run(assetId);
       const versions = db.prepare('SELECT COUNT(*) n FROM asset_versions WHERE asset_id = ?').get(assetId).n;
       const inProductions = db.prepare('SELECT COUNT(*) n FROM production_asset_items WHERE asset_id = ?').get(assetId).n;
       const preferred = db.prepare(`
         SELECT (SELECT COUNT(*) FROM world_profiles WHERE cover_asset_id = ? OR background_asset_id = ?) +
-               (SELECT COUNT(*) FROM character_profiles WHERE portrait_asset_id = ? OR full_body_asset_id = ?) AS n
+               (SELECT COUNT(*) FROM character_profiles WHERE portrait_asset_id = ? OR tile_asset_id = ?) AS n
       `).get(assetId, assetId, assetId, assetId).n;
       if (versions > 1 || inProductions > 0 || preferred > 0) {
         throw domainError('inbox.undo_blocked', 'This asset gained new versions or references since filing, so the filing cannot be undone.', {

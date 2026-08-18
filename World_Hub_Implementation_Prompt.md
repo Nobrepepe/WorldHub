@@ -401,15 +401,14 @@ World Hub owns this initial role vocabulary:
 - `world.background`
 - `location.background`
 - `character.portrait`
-- `character.identity_tile`
+- `character.tile`
 - `character.full_body`
-- `character.sprite`
-- `character.expression`
 - `character.collectible`
+- `character.stamp`
 - `object.icon`
 - `scene.key_art`
 - `audio.voice_line`
-- `audio.character_cue`
+- `audio.cue`
 - `reference.art`
 - `reference.document`
 
@@ -423,10 +422,10 @@ Ship editable built-in recipes with stable IDs:
 | --- | ---: | --- | --- |
 | `thumbnail_square` | 320×320 | contain | WebP |
 | `square` | 1024×1024 | cover | WebP |
-| `landscape_16x9` | 1600×900 | cover | WebP |
-| `wide_tile_16x9` | 1280×720 | contain | WebP with alpha |
-| `portrait_9x16` | 900×1600 | cover | WebP |
-| `card_3x4` | 900×1200 | cover | WebP |
+| `tile_16x9` | 1600×900 | cover | WebP |
+| `stamp_4x3` | 1280×960 | cover | WebP with alpha |
+| `full_body_9x16` | 900×1600 | cover | WebP |
+| `portrait_3x4` | 900×1200 | cover | WebP |
 | `original` | unchanged | none | original bytes |
 
 A recipe records dimensions, fit, output format, quality, alpha behavior, background, and whether upscaling is allowed. Contracts refer to recipe IDs, never filenames.
@@ -451,7 +450,7 @@ Import is non-destructive:
 
 - Copy supported material into the managed Inbox.
 - Do not move, rename, alter, or delete the source.
-- Deduplicate identical bytes.
+- Deduplicate identical bytes, and flag — never auto-resolve — an item whose filename would title an asset the library already holds. The comparison folds case and treats `-`/`_` as noise, and archived assets still count.
 - Record the batch, original path relative to the chosen root, filename, type, size, checksum, import time, and status.
 - Do not automatically convert folder names into canonical worlds or characters.
 
@@ -476,6 +475,7 @@ The Inbox screen must support:
 - turn Markdown into a linked canonical document
 - turn media into a logical asset
 - mark duplicate or ignored
+- flag items whose name an asset already holds, and offer to file them as a new version of it
 - undo the last filing operation when no later dependency prevents it
 - clear only already-filed staging copies after confirming that their canonical managed records resolve
 

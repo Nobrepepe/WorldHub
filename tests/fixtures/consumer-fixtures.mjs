@@ -166,7 +166,7 @@ export async function buildTaskStampsProduction(library, { variant = 1 } = {}) {
       stamps.push(await importImage(library, `${hero.name} stamp ${n}`, { entityId: hero.id, role: 'character.collectible', seed: 1000 + index * 100 + n + (variant === 2 && n === 1 ? 9999 : 0) }));
     }
     setAssetSetItems(library, production.id, { slot: 'stamps', entityId: hero.id, items: items(stamps) });
-    const cue = await importSound(library, `${hero.name} cue`, { entityId: hero.id, role: 'audio.character_cue', seed: 300 + index });
+    const cue = await importSound(library, `${hero.name} cue`, { entityId: hero.id, role: 'audio.cue', seed: 300 + index });
     setAssetSetItems(library, production.id, { slot: 'default_sound', entityId: hero.id, items: items([cue]) });
     const line = await importSound(library, `${hero.name} stamp five line`, { entityId: hero.id, role: 'audio.voice_line', seed: 400 + index });
     setAssetSetItems(library, production.id, {
@@ -207,10 +207,10 @@ export async function buildChatBotProduction(library, { variant = 1 } = {}) {
     setProductionValue(library, production.id, { scope: 'entity', entityId: hero.id, field: 'char_behavior_rules', value: 'Never breaks character; never narrates the user.' });
     setProductionValue(library, production.id, { scope: 'entity', entityId: hero.id, field: 'char_ai_instructions', value: 'Enjoys ember metaphors.' });
     setProductionValue(library, production.id, { scope: 'entity', entityId: hero.id, field: 'char_relationship_to_user', value: 'trusted friend' });
-    const tile = await importImage(library, `${hero.name} tile`, { entityId: hero.id, role: 'character.identity_tile', seed: 600 + index });
+    const tile = await importImage(library, `${hero.name} tile`, { entityId: hero.id, role: 'character.tile', seed: 600 + index });
     setAssetSetItems(library, production.id, { slot: 'tile', entityId: hero.id, items: items([tile]) });
-    const neutral = await importImage(library, `${hero.name} neutral sprite`, { entityId: hero.id, role: 'character.expression', seed: 700 + index * 10 });
-    const happy = await importImage(library, `${hero.name} happy sprite`, { entityId: hero.id, role: 'character.expression', seed: 701 + index * 10 });
+    const neutral = await importImage(library, `${hero.name} neutral sprite`, { entityId: hero.id, role: 'character.full_body', seed: 700 + index * 10 });
+    const happy = await importImage(library, `${hero.name} happy sprite`, { entityId: hero.id, role: 'character.full_body', seed: 701 + index * 10 });
     setAssetSetItems(library, production.id, {
       slot: 'sprites', entityId: hero.id,
       items: [

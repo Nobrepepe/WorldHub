@@ -7,6 +7,7 @@ import {
 import {
   createProduction, getProduction, updateProduction, setProductionValue, setSelection,
   setAssetSetItems, validateProduction, setProductionStatus, listProductions,
+  rebindTargets, planProductionRebind, rebindProduction,
 } from '../../services/production-service.js';
 
 register('contract.validate', {
@@ -133,4 +134,28 @@ register('production.setStatus', {
 register('production.list', {
   payload: v.object({ includeArchived: v.optional(v.boolean(), false) }),
   handler: (ctx, payload) => listProductions(ctx.library, payload),
+});
+
+register('production.rebindTargets', {
+  payload: v.object({ id: v.uuid() }),
+  handler: (ctx, { id }) => rebindTargets(ctx.library, id),
+});
+
+register('production.planRebind', {
+  payload: v.object({
+    id: v.uuid(),
+    contractId: v.optional(v.nullable(v.uuid()), null),
+    contractVersion: v.optional(v.nullable(v.integer({ min: 1 })), null),
+  }),
+  handler: (ctx, { id, ...payload }) => planProductionRebind(ctx.library, id, payload),
+});
+
+register('production.rebind', {
+  requiresWrite: true,
+  payload: v.object({
+    id: v.uuid(),
+    contractId: v.optional(v.nullable(v.uuid()), null),
+    contractVersion: v.optional(v.nullable(v.integer({ min: 1 })), null),
+  }),
+  handler: (ctx, { id, ...payload }) => rebindProduction(ctx.library, id, payload),
 });

@@ -21,21 +21,44 @@ export const ASSET_ROLES = [
   'world.background',
   'location.background',
   'character.portrait',
-  'character.identity_tile',
+  'character.tile',
   'character.full_body',
-  'character.sprite',
-  'character.expression',
   'character.collectible',
+  'character.stamp',
   'object.icon',
   'scene.key_art',
   'audio.voice_line',
-  'audio.character_cue',
+  'audio.cue',
   'reference.art',
   'reference.document',
 ];
 
+const PREFERRED_SLOT_BY_ROLE = {
+  'world.cover': ['world_profiles', 'cover_asset_id'],
+  'world.background': ['world_profiles', 'background_asset_id'],
+  'character.portrait': ['character_profiles', 'portrait_asset_id'],
+  'character.tile': ['character_profiles', 'tile_asset_id'],
+};
+
+function fillEmptyPreferredSlot(db, assetId, entityId, role) {
+  const slot = PREFERRED_SLOT_BY_ROLE[role];
+  if (!slot) return;
+  const [table, column] = slot;
+  db.prepare(`UPDATE ${table} SET ${column} = ? WHERE entity_id = ? AND ${column} IS NULL`).run(assetId, entityId);
+}
+
 function sha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+/**
+ * Comparison key for "is this the same name?" questions. Case is folded
+ * and `-`/`_` are treated as noise, so `HDV08_ST01` and `hdv08-st01` are
+ * one name. Stored alongside the title so the Inbox can look matches up
+ * through an index; the same rule is frozen into migration 010.
+ */
+export function titleKey(text) {
+  return String(text ?? '').toLowerCase().replaceAll('-', '').replaceAll('_', '');
 }
 
 /** World Hub owns the role vocabulary; unknown roles never become data. */
@@ -103,10 +126,11 @@ export async function importAsset(library, { buffer, filename, title, importedFr
   const versionId = crypto.randomUUID();
   const now = nowIso();
 
+  const finalTitle = title?.trim() || filename;
   inTransaction(db, () => {
     db.prepare(`
-      INSERT INTO assets (id, title, kind, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
-    `).run(id, title?.trim() || filename, kind, now, now);
+      INSERT INTO assets (id, title, title_key, kind, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, finalTitle, titleKey(finalTitle), kind, now, now);
     db.prepare(`
       INSERT INTO asset_versions (id, asset_id, blob_hash, version_number, original_filename, imported_from, created_at)
       VALUES (?, ?, ?, 1, ?, ?, ?)
@@ -115,6 +139,7 @@ export async function importAsset(library, { buffer, filename, title, importedFr
     if (entityId && role) {
       assertKnownRole(role);
       db.prepare('INSERT OR IGNORE INTO asset_links (asset_id, entity_id, role, position) VALUES (?, ?, ?, 0)').run(id, entityId, role);
+      if (kind === 'image') fillEmptyPreferredSlot(db, id, entityId, role);
     }
     recordActivity(db, 'asset.imported', 'asset', id, filename);
     syncAssetIndex(library, id);
@@ -209,7 +234,9 @@ export function updateAsset(library, id, { title, notes }) {
   const row = db.prepare('SELECT * FROM assets WHERE id = ?').get(id);
   if (!row) throw domainError('asset.missing', 'That asset no longer exists.');
   inTransaction(db, () => {
-    if (title !== undefined && title.trim()) db.prepare('UPDATE assets SET title = ? WHERE id = ?').run(title.trim(), id);
+    if (title !== undefined && title.trim()) {
+      db.prepare('UPDATE assets SET title = ?, title_key = ? WHERE id = ?').run(title.trim(), titleKey(title.trim()), id);
+    }
     if (notes !== undefined) db.prepare('UPDATE assets SET notes = ? WHERE id = ?').run(notes, id);
     db.prepare('UPDATE assets SET updated_at = ? WHERE id = ?').run(nowIso(), id);
     syncAssetIndex(library, id);
@@ -248,6 +275,8 @@ export function setAssetLinks(library, assetId, links) {
       }
       assertKnownRole(link.role);
       insert.run(assetId, link.entityId, link.role, i);
+      const asset = db.prepare('SELECT kind, status FROM assets WHERE id = ?').get(assetId);
+      if (asset?.kind === 'image' && asset.status === 'active') fillEmptyPreferredSlot(db, assetId, link.entityId, link.role);
     });
     syncAssetIndex(library, assetId);
   });
@@ -294,8 +323,11 @@ export function listAssets(library, { entityId, role, kind, worldId, status = 'a
     size: row.size,
     mime: row.mime,
     updatedAt: row.updated_at,
+    currentVersionId: row.current_version_id,
     roles: db.prepare('SELECT DISTINCT role FROM asset_links WHERE asset_id = ?').all(row.id).map((r) => r.role),
-    thumbUrl: assetDisplayUrl(db, row.id),
+    // Prefer the crop-aware gallery rendition when it has already been
+    // generated; the renderer lazily creates missing ones as tiles enter view.
+    thumbUrl: assetDisplayUrl(db, row.id, 'tile_16x9'),
   }));
   if (aspect === 'wide') mapped = mapped.filter((a) => a.width && a.height && a.width / a.height > 1.2);
   else if (aspect === 'tall') mapped = mapped.filter((a) => a.width && a.height && a.height / a.width > 1.2);
@@ -320,9 +352,9 @@ export function assetUsage(library, id) {
     JOIN entities e ON e.id = w.entity_id
     WHERE w.cover_asset_id = ? OR w.background_asset_id = ?
     UNION ALL
-    SELECT e.id, e.name, 'character portrait or full body' AS via FROM character_profiles c
+    SELECT e.id, e.name, 'character portrait or tile' AS via FROM character_profiles c
     JOIN entities e ON e.id = c.entity_id
-    WHERE c.portrait_asset_id = ? OR c.full_body_asset_id = ?
+    WHERE c.portrait_asset_id = ? OR c.tile_asset_id = ?
   `).all(id, id, id, id);
   return { links, productions, preferredIn };
 }
@@ -375,9 +407,17 @@ export function getCrop(library, versionId, recipeId) {
   return library.db.prepare('SELECT * FROM asset_crops WHERE version_id = ? AND recipe_id = ?').get(versionId, recipeId) ?? null;
 }
 
+/**
+ * Bumped whenever renderImage changes in a way that alters output bytes,
+ * so cached renditions from an older pipeline fall out and regenerate.
+ * 2: transparency is carried through with a lossless alpha channel.
+ */
+const PIPELINE_VERSION = 2;
+
 /** Deterministic fingerprint of everything that shapes the output. */
 function renditionFingerprint(blobHash, recipe, crop) {
   const payload = JSON.stringify({
+    pipeline: PIPELINE_VERSION,
     blob: blobHash,
     recipe: {
       w: recipe.width, h: recipe.height, fit: recipe.fit, format: recipe.format,
@@ -491,7 +531,11 @@ async function renderImage(sourceAbs, recipe, crop) {
   if (!recipe.preserve_alpha) {
     image = image.flatten({ background });
   }
-  const buffer = await image.webp({ quality: recipe.quality, alphaQuality: recipe.preserve_alpha ? 90 : 0 }).toBuffer();
+  // Silhouettes live or die by their edges, so the alpha channel is kept
+  // lossless even though the colour channels are not.
+  const buffer = await image
+    .webp({ quality: recipe.quality, alphaQuality: recipe.preserve_alpha ? 100 : 0 })
+    .toBuffer();
   const outMeta = await sharp(buffer).metadata();
   return { buffer, width: outMeta.width, height: outMeta.height };
 }
@@ -596,15 +640,23 @@ export function installMediaResolvers(library) {
 }
 
 /** Displayable worldhub:// URL for an asset's current version, or null. */
-export function assetDisplayUrl(db, assetId) {
+export function assetDisplayUrl(db, assetId, recipeId = null) {
   if (!assetId) return null;
   const row = db.prepare(`
-    SELECT b.hash FROM assets a
+    SELECT b.hash, a.current_version_id FROM assets a
     JOIN asset_versions v ON v.id = a.current_version_id
     JOIN blobs b ON b.hash = v.blob_hash
     WHERE a.id = ? AND a.status = 'active'
   `).get(assetId);
-  return row ? `worldhub://media/blob/${row.hash}` : null;
+  if (!row) return null;
+  if (recipeId) {
+    const rendition = db.prepare(`
+      SELECT id FROM generated_renditions
+      WHERE version_id = ? AND recipe_id = ? ORDER BY created_at DESC LIMIT 1
+    `).get(row.current_version_id, recipeId);
+    if (rendition) return `worldhub://media/rendition/${rendition.id}`;
+  }
+  return `worldhub://media/blob/${row.hash}`;
 }
 
 function kindFromMime(mime) {

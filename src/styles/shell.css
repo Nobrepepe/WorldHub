@@ -153,6 +153,8 @@
   object-fit: cover;
 }
 .row-thumb.no-art { width: 3rem; height: 3rem; min-height: 0; font-size: 0.5rem; }
+/* tick box on a selectable row (bulk asset picking) */
+.row > input[type="checkbox"] { flex: 0 0 auto; margin-left: 0.2rem; }
 
 /* ---- overlays ---- */
 

@@ -539,7 +539,7 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
         biography: profile.biography ?? '',
         voice: profile.voice ?? '',
         portraitAssetId: packagedAssetId(profile.portrait_asset_id),
-        fullBodyAssetId: packagedAssetId(profile.full_body_asset_id),
+        tileAssetId: packagedAssetId(profile.tile_asset_id),
       };
     });
   writePackageFile('catalog/characters.json', stableJson(charactersJson));
@@ -775,7 +775,7 @@ function verifyAssembledPackage(workAbs, assembly) {
   }
   const characters = JSON.parse(fs.readFileSync(path.join(workAbs, 'catalog', 'characters.json'), 'utf8'));
   for (const character of characters) {
-    for (const ref of [character.portraitAssetId, character.fullBodyAssetId]) {
+    for (const ref of [character.portraitAssetId, character.tileAssetId]) {
       if (ref && !packagedAssetIds.has(ref)) {
         throw domainError('publish.profile_asset_dangling', 'A character profile references an asset outside the package.');
       }

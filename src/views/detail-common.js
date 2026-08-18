@@ -17,8 +17,8 @@ import { openRelationshipEditor, relationshipRow } from './relationships.js';
 export function detailHeader(entity, { eyebrow }) {
   const head = el('header', { class: 'page-head' });
   if (entity.artUrl) {
-    head.append(el('div', { class: 'hero' },
-      artImg(entity.artUrl, { alt: entity.name, className: 'hero-art art-bleed' }),
+    head.append(el('div', { class: 'hero detail-hero' },
+      artImg(entity.artUrl, { alt: entity.name, className: 'hero-art art-bleed', assetId: entity.artAssetId, recipeId: entity.artRecipeId }),
       el('div', { class: 'hero-glow' }),
     ));
   }
@@ -30,6 +30,46 @@ export function detailHeader(entity, { eyebrow }) {
     ),
   );
   return head;
+}
+
+export async function resolveEntityArt(entity, recipeId, slot) {
+  const art = await callSafe('entity.preferredArt', { id: entity.id, recipeId, slot });
+  return art ?? { assetId: null, versionId: null, recipeId, url: null };
+}
+
+export async function displayArtSection(entity, slots, onChanged) {
+  const host = el('div', { class: 'section' }, el('span', { class: 'eyebrow' }, 'Display art'));
+  const readOnly = getState().library?.readOnly;
+  for (const slot of slots) {
+    const candidates = await call('asset.list', { entityId: entity.id, role: slot.role, kind: 'image', status: 'active' });
+    const selectedId = entity.profile[slot.dbKey] ?? '';
+    const selected = candidates.find((asset) => asset.id === selectedId);
+    const preview = el('div', { style: { marginTop: '0.5rem', maxWidth: slot.previewWidth ?? '18rem' } });
+    if (selected) {
+      const rendition = await callSafe('rendition.generate', { versionId: selected.currentVersionId, recipeId: slot.recipeId });
+      preview.append(artImg(rendition?.url ?? selected.thumbUrl, { alt: `${entity.name} ${slot.label}` }));
+    } else if (selectedId) {
+      preview.append(el('p', { class: 'state-bad' }, 'The selected asset is archived or no longer associated under the required role. Choose a replacement or clear this selection.'));
+    } else {
+      preview.append(el('p', { class: 'section-note' }, candidates.length ? 'No preferred asset selected; the first compatible association is used as a fallback.' : 'Associate an active image under this role to make it available.'));
+    }
+    const select = selectInput({
+      value: selectedId,
+      ariaLabel: slot.label,
+      options: [
+        { value: '', label: 'No explicit selection' },
+        ...candidates.map((asset) => ({ value: asset.id, label: asset.title })),
+      ],
+      onChange: async (assetId) => {
+        if (readOnly) return;
+        const updated = await call('entity.update', { id: entity.id, profile: { [slot.profileKey]: assetId || null } });
+        onChanged?.(updated);
+      },
+    });
+    select.disabled = readOnly;
+    host.append(field(slot.label, el('div', {}, select, preview), { hint: `Only active images associated as ${slot.role} are shown.` }));
+  }
+  return host;
 }
 
 export function statusSentence(entity) {

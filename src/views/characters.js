@@ -6,7 +6,7 @@ import { textInput, selectInput, field } from '../ui/forms.js';
 import { getState } from '../store.js';
 import { createNamedEntity } from './worlds.js';
 import {
-  detailHeader, tabbedSections, baseFieldsSection, profileField,
+  detailHeader, tabbedSections, baseFieldsSection, profileField, displayArtSection, resolveEntityArt,
   documentsSection, assetsSection, relationshipsSection, usageSection, archiveControls,
 } from './detail-common.js';
 import { createAutosaver } from '../ui/autosave.js';
@@ -35,6 +35,10 @@ export async function renderCharacters() {
     const q = filter.text.trim().toLowerCase();
     let visible = q ? characters.filter((c) => c.name.toLowerCase().includes(q)) : characters;
     if (filter.missingArt) visible = visible.filter((c) => !c.artUrl);
+    await Promise.all(visible.map(async (character) => {
+      const art = await resolveEntityArt(character, 'portrait_3x4', 'portrait');
+      Object.assign(character, { artUrl: art.url, artAssetId: art.assetId, artRecipeId: art.recipeId });
+    }));
 
     if (visible.length === 0) {
       galleryHost.append(el('p', { class: 'empty-state' },
@@ -48,7 +52,7 @@ export async function renderCharacters() {
         onclick: () => navigate(`/character/${character.id}`),
         onkeydown: (e) => { if (e.key === 'Enter') navigate(`/character/${character.id}`); },
       },
-        artImg(character.artUrl, { alt: character.name }),
+        artImg(character.artUrl, { alt: character.name, assetId: character.artAssetId, recipeId: character.artRecipeId }),
         el('div', { class: 'g-name' }, character.name),
         el('div', { class: 'g-sub' }, [character.worldName, character.status === 'archived' ? 'archived' : null].filter(Boolean).join(' · ') || ' '),
       ));
@@ -112,6 +116,8 @@ export async function renderCharacters() {
 
 export async function renderCharacterDetail({ id }) {
   let entity = await call('entity.get', { id });
+  const art = await resolveEntityArt(entity, 'tile_16x9', 'tile');
+  Object.assign(entity, { artUrl: art.url, artAssetId: art.assetId, artRecipeId: art.recipeId });
   const host = el('div', {});
   host.append(detailHeader(entity, { eyebrow: entity.world ? `Character · ${entity.world.name}` : 'Character' }));
 
@@ -141,7 +147,7 @@ export async function renderCharacterDetail({ id }) {
     return container;
   };
 
-  const profileTab = () => {
+  const profileTab = async () => {
     const container = el('div', { style: { maxWidth: '44rem' } });
     const patch = { profile: {} };
     const saver = createAutosaver({
@@ -156,6 +162,10 @@ export async function renderCharacterDetail({ id }) {
       saver.markDirty();
     };
     const p = entity.profile;
+    const artSection = await displayArtSection(entity, [
+      { label: 'Portrait', role: 'character.portrait', profileKey: 'portraitAssetId', dbKey: 'portrait_asset_id', recipeId: 'full_body_9x16' },
+      { label: 'Tile', role: 'character.tile', profileKey: 'tileAssetId', dbKey: 'tile_asset_id', recipeId: 'tile_16x9' },
+    ], (updated) => { entity = updated; navigate(`/character/${entity.id}`); });
     container.append(
       el('div', { style: { display: 'flex', justifyContent: 'flex-end' } }, saver.stateEl),
       profileField('Role', 'role', p.role, change),
@@ -164,6 +174,7 @@ export async function renderCharacterDetail({ id }) {
       profileField('Personality, in short', 'personality', p.personality, change, { multiline: true }),
       profileField('Biography, in short', 'biography', p.biography, change, { multiline: true }),
       profileField('Voice, in short', 'voice', p.voice, change, { multiline: true }),
+      artSection,
       el('p', { class: 'section-note', style: { marginTop: '1rem' } },
         'These stay concise on purpose. Full biographies, studies, and stories live as linked documents.'),
     );

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { makeTempDir, makeAppContext, makeTestLibrary } from './helpers.mjs';
 import { createLibrary, openLibrary, closeLibrary, readDescriptor, LIBRARY_FOLDERS } from '../electron/services/library-service.js';
 import { describeLock, acquireLock, releaseLock } from '../electron/services/lock-service.js';
@@ -89,6 +90,87 @@ test('a failing migration rolls back and leaves no partial schema', async () => 
   const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all().map((r) => r.name);
   assert.ok(tables.includes('alpha'));
   assert.ok(!tables.includes('beta'), 'partial migration table must be rolled back');
+  db.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('the vocabulary migration renames recipes and roles, keeping crops, renditions, and links', async () => {
+  const dir = makeTempDir();
+  const legacyDir = path.join(dir, 'migrations');
+  fs.mkdirSync(legacyDir);
+  const realDir = fileURLToPath(new URL('../migrations', import.meta.url));
+  for (const file of fs.readdirSync(realDir).filter((f) => Number(f.slice(0, 3)) < 9)) {
+    fs.copyFileSync(path.join(realDir, file), path.join(legacyDir, file));
+  }
+  const db = openDatabase(path.join(dir, 'test.sqlite3'));
+  await applyMigrations(db, { dir: legacyDir });
+
+  const t = '2026-01-01T00:00:00.000Z';
+  db.exec(`
+    INSERT INTO entities (id, type, name, slug, created_at, updated_at) VALUES ('char-1', 'character', 'Nao', 'nao', '${t}', '${t}');
+    INSERT INTO character_profiles (entity_id, identity_tile_asset_id) VALUES ('char-1', 'asset-1');
+    INSERT INTO blobs (hash, ext, size, mime, path, created_at) VALUES ('hash-1', 'png', 4, 'image/png', 'assets/originals/ha/hash-1.png', '${t}');
+    INSERT INTO assets (id, title, kind, created_at, updated_at) VALUES ('asset-1', 'Nao art', 'image', '${t}', '${t}');
+    INSERT INTO asset_versions (id, asset_id, blob_hash, version_number, created_at) VALUES ('version-1', 'asset-1', 'hash-1', 1, '${t}');
+    INSERT INTO asset_links (asset_id, entity_id, role) VALUES
+      ('asset-1', 'char-1', 'character.identity_tile'),
+      ('asset-1', 'char-1', 'character.cowboy'),
+      ('asset-1', 'char-1', 'character.sprite'),
+      ('asset-1', 'char-1', 'character.gsi');
+    INSERT INTO asset_crops (version_id, recipe_id, focal_x, updated_at) VALUES ('version-1', 'card_3x4', 0.8, '${t}');
+    INSERT INTO generated_renditions (id, version_id, recipe_id, fingerprint, path, width, height, size, mime, created_at)
+      VALUES ('rend-1', 'version-1', 'wide_tile_16x9', 'fp-1', 'assets/renditions/version-1/wide_tile_16x9-fp.webp', 1280, 720, 10, 'image/webp', '${t}');
+  `);
+
+  await applyMigrations(db);
+
+  const recipes = db.prepare('SELECT id, width, height, fit FROM rendition_recipes ORDER BY id').all();
+  assert.deepEqual(recipes.map((r) => r.id).sort(),
+    ['full_body_9x16', 'original', 'portrait_3x4', 'square', 'stamp_4x3', 'thumbnail_square', 'tile_16x9']);
+  const stamp = recipes.find((r) => r.id === 'stamp_4x3');
+  assert.deepEqual([stamp.width, stamp.height, stamp.fit], [1280, 960, 'cover'], 'the second 16:9 recipe became the wide 4:3 shape');
+
+  assert.equal(db.prepare(`SELECT focal_x FROM asset_crops WHERE recipe_id = 'portrait_3x4'`).get().focal_x, 0.8, 'crops follow the rename');
+  assert.equal(db.prepare(`SELECT COUNT(*) n FROM generated_renditions WHERE recipe_id = 'stamp_4x3'`).get().n, 1, 'cached renditions follow the rename');
+
+  const roles = db.prepare('SELECT role FROM asset_links ORDER BY role').all().map((r) => r.role);
+  assert.deepEqual(roles, ['character.stamp', 'character.tile', 'reference.art'],
+    'renamed roles are kept and the two retired roles collapse into one reference link');
+  assert.equal(db.prepare(`SELECT tile_asset_id FROM character_profiles WHERE entity_id = 'char-1'`).get().tile_asset_id, 'asset-1');
+
+  db.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('the name-key migration backfills existing assets and Inbox items', async () => {
+  const dir = makeTempDir();
+  const legacyDir = path.join(dir, 'migrations');
+  fs.mkdirSync(legacyDir);
+  const realDir = fileURLToPath(new URL('../migrations', import.meta.url));
+  for (const file of fs.readdirSync(realDir).filter((f) => Number(f.slice(0, 3)) < 10)) {
+    fs.copyFileSync(path.join(realDir, file), path.join(legacyDir, file));
+  }
+  const db = openDatabase(path.join(dir, 'test.sqlite3'));
+  await applyMigrations(db, { dir: legacyDir });
+
+  const t = '2026-01-01T00:00:00.000Z';
+  db.exec(`
+    INSERT INTO assets (id, title, kind, created_at, updated_at) VALUES ('asset-1', 'HDV08_ST01', 'image', '${t}', '${t}');
+    INSERT INTO inbox_batches (id, label, source_root, imported_at) VALUES ('batch-1', 'drop', '/tmp', '${t}');
+    INSERT INTO inbox_items (id, batch_id, filename, kind, imported_at)
+      VALUES ('item-1', 'batch-1', 'hdv08-st01.png', 'image', '${t}'),
+             ('item-2', 'batch-1', 'archive.tar.gz', 'attachment', '${t}');
+  `);
+
+  await applyMigrations(db);
+
+  assert.equal(db.prepare(`SELECT title_key FROM assets WHERE id = 'asset-1'`).get().title_key, 'hdv08st01');
+  const keys = db.prepare('SELECT id, name_key FROM inbox_items ORDER BY id').all();
+  assert.deepEqual(keys, [
+    { id: 'item-1', name_key: 'hdv08st01' },
+    { id: 'item-2', name_key: 'archive.tar' },
+  ], 'only the final extension is dropped, and the loose key matches the asset');
+
   db.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });

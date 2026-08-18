@@ -19,19 +19,18 @@ Roles say what art *means*, never how it is stored. The built-in vocabulary:
 | `world.background` | Full-screen backdrop for the world |
 | `location.background` | Backdrop for a location |
 | `character.portrait` | Face-forward character image |
-| `character.identity_tile` | Small identifying tile |
+| `character.tile` | Small identifying tile |
 | `character.full_body` | Full-body artwork |
-| `character.sprite` | Game-ready sprite |
-| `character.expression` | An expression variant |
 | `character.collectible` | A collectible presentation of the character |
+| `character.stamp` | A wide framed stamp of the character |
 | `object.icon` | Icon for an object |
 | `scene.key_art` | Key art for a scene or moment |
 | `audio.voice_line` | A spoken line |
-| `audio.character_cue` | A musical or audio cue for a character |
+| `audio.cue` | A musical or audio cue |
 | `reference.art` | Reference material, not for presentation |
 | `reference.document` | Reference file |
 
-The Inbox may suggest a role from the file path, but a person always confirms it. Contract asset sets constrain which roles they accept, and validation enforces that a chosen asset is linked to the selected entity under an allowed role.
+The Inbox may suggest a role from the file path, but a person always confirms it. It also flags an item whose filename would title an asset the library already holds — case and `-`/`_` are ignored when comparing, and archived assets count — and offers to file it as a new version of that asset instead of creating a second one. Byte-identical files are still marked `duplicate` on import; a shared name is only ever a hint. Contract asset sets constrain which roles they accept, and validation enforces that a chosen asset is linked to the selected entity under an allowed role.
 
 The vocabulary is enforced at the service boundary: linking or importing with a role outside this list is refused, so typos never become permanent data. Published packages export the roles an asset **actually holds** for the linked record, never a contract's allowed list.
 
@@ -40,12 +39,14 @@ The vocabulary is enforced at the service boundary: linking or importing with a 
 | Recipe | Canvas | Default fit | Output |
 | --- | ---: | --- | --- |
 | `thumbnail_square` | 320×320 | contain | WebP with alpha |
-| `square` | 1024×1024 | cover | WebP |
-| `landscape_16x9` | 1600×900 | cover | WebP |
-| `wide_tile_16x9` | 1280×720 | contain | WebP with alpha |
-| `portrait_9x16` | 900×1600 | cover | WebP |
-| `card_3x4` | 900×1200 | cover | WebP |
+| `square` | 1024×1024 | cover | WebP with alpha |
+| `tile_16x9` | 1600×900 | cover | WebP with alpha |
+| `stamp_4x3` | 1280×960 | cover | WebP with alpha |
+| `full_body_9x16` | 900×1600 | cover | WebP with alpha |
+| `portrait_3x4` | 900×1200 | cover | WebP with alpha |
 | `original` | unchanged | none | original bytes |
+
+Every built-in recipe carries transparency through, and the alpha channel is encoded losslessly even though the colour channels are not: art drawn to bleed into a consumer's background keeps its silhouette instead of arriving on a rectangle. A recipe can still be told to matte (`preserve_alpha` off), in which case transparent pixels are composited onto its `background`, or onto the archive floor when none is set.
 
 A recipe records dimensions, fit, output format, quality, alpha behavior, background, and whether upscaling is allowed. Recipes are editable (Settings → rendition quality sets the default; each recipe can be tuned via the API). Contracts refer to recipe IDs, never filenames.
 

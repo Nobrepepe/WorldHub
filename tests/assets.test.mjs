@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 import { makeTestLibrary, tinyWav } from './helpers.mjs';
-import { createEntity } from '../electron/services/entity-service.js';
+import { createEntity, getEntity, updateEntity, preferredArtAsset, preferredRendition } from '../electron/services/entity-service.js';
 import {
   storeBlob, importAsset, addAssetVersion, getAsset, setAssetLinks, listAssets,
   setCrop, generateRendition, setAssetArchived, auditUnreferencedBlobs, trashUnreferencedBlobs,
-  updateRecipe,
+  updateRecipe, listRecipes,
 } from '../electron/services/asset-service.js';
 import { classifyFile } from '../electron/services/file-signatures.js';
 
@@ -97,8 +97,92 @@ test('roles link assets to entities; lists filter by role and entity', async (t)
 
   assert.equal(listAssets(library, { entityId: nao.id }).length, 1);
   assert.equal(listAssets(library, { role: 'world.cover' }).length, 1);
-  assert.equal(listAssets(library, { role: 'character.sprite' }).length, 0);
+  assert.equal(listAssets(library, { role: 'character.stamp' }).length, 0);
   assert.equal(listAssets(library, { worldId: world.id }).length, 1, 'world filter follows links');
+});
+
+test('character art roles are accepted and filterable', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const world = createEntity(library, { type: 'world', name: 'Role World' });
+  const character = createEntity(library, { type: 'character', name: 'Role Character', worldId: world.id });
+  const stamp = await importAsset(library, {
+    buffer: await makePng(), filename: 'stamp.png', title: 'Stamp art',
+    entityId: character.id, role: 'character.stamp',
+  });
+  const collectible = await importAsset(library, {
+    buffer: await makePng(), filename: 'collectible.png', title: 'Collectible art',
+    entityId: character.id, role: 'character.collectible',
+  });
+
+  assert.deepEqual(listAssets(library, { role: 'character.stamp' }).map((asset) => asset.id), [stamp.id]);
+  assert.deepEqual(listAssets(library, { role: 'character.collectible' }).map((asset) => asset.id), [collectible.id]);
+});
+
+test('display art supports automatic selection, explicit replacement, clearing, fallback and rendition regeneration', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const world = createEntity(library, { type: 'world', name: 'Display World' });
+  const first = await importAsset(library, {
+    buffer: await makePng({ width: 1200, height: 800 }), filename: 'first.png', title: 'First cover',
+    entityId: world.id, role: 'world.cover',
+  });
+  assert.equal(getEntity(library, world.id).profile.cover_asset_id, first.id, 'the first role filing fills an empty slot');
+
+  const second = await importAsset(library, {
+    buffer: await makePng({ width: 1000, height: 700 }), filename: 'second.png', title: 'Second cover',
+    entityId: world.id, role: 'world.cover',
+  });
+  assert.equal(getEntity(library, world.id).profile.cover_asset_id, first.id, 'another association never replaces a preference');
+  updateEntity(library, world.id, { profile: { coverAssetId: second.id } });
+  assert.equal(preferredArtAsset(library.db, 'world', world.id), second.id, 'explicit replacement wins');
+
+  updateEntity(library, world.id, { profile: { coverAssetId: null } });
+  assert.equal(preferredArtAsset(library.db, 'world', world.id), first.id, 'clearing uses the first compatible role fallback');
+  updateEntity(library, world.id, { profile: { coverAssetId: second.id } });
+  setAssetArchived(library, second.id, true);
+  assert.equal(preferredArtAsset(library.db, 'world', world.id), first.id, 'an archived preference falls back safely');
+  setAssetArchived(library, second.id, false);
+  setAssetLinks(library, second.id, []);
+  assert.equal(getEntity(library, world.id).profile.cover_asset_id, second.id, 'disassociation preserves the preference so the UI can explain it');
+  assert.equal(preferredArtAsset(library.db, 'world', world.id), first.id, 'a disassociated preference is not displayed');
+
+  const beforeVersion = await preferredRendition(library, 'world', world.id, 'tile_16x9');
+  const replaced = await addAssetVersion(library, first.id, {
+    buffer: await makePng({ width: 1400, height: 900 }), filename: 'first-v2.png',
+  });
+  const afterVersion = await preferredRendition(library, 'world', world.id, 'tile_16x9');
+  assert.equal(afterVersion.versionId, replaced.currentVersionId, 'presentation resolves the current asset version');
+  assert.notEqual(afterVersion.url, beforeVersion.url, 'a new version receives a new rendition');
+  setCrop(library, {
+    versionId: replaced.currentVersionId, recipeId: 'tile_16x9', focalX: 0.8, focalY: 0.3,
+    zoom: 1.3, panX: 0, panY: 0, rotation: 0, background: '',
+  });
+  const afterCrop = await preferredRendition(library, 'world', world.id, 'tile_16x9');
+  assert.notEqual(afterCrop.url, afterVersion.url, 'a crop change regenerates the rendition immediately');
+
+  const background = await importAsset(library, {
+    buffer: await makePng({ width: 1500, height: 900 }), filename: 'background.png', title: 'World background',
+    entityId: world.id, role: 'world.background',
+  });
+  assert.equal(preferredArtAsset(library.db, 'world', world.id, 'background'), background.id, 'world headers resolve background art independently');
+  assert.equal(preferredArtAsset(library.db, 'world', world.id, 'cover'), first.id, 'world galleries continue resolving cover art');
+
+  const character = createEntity(library, { type: 'character', name: 'Tile Hero', worldId: world.id });
+  const portrait = await importAsset(library, {
+    buffer: await makePng(), filename: 'portrait.png', title: 'Portrait',
+    entityId: character.id, role: 'character.portrait',
+  });
+  const tile = await importAsset(library, {
+    buffer: await makePng({ width: 900, height: 500 }), filename: 'tile.png', title: 'Tile',
+    entityId: character.id, role: 'character.tile',
+  });
+  const characterProfile = getEntity(library, character.id).profile;
+  assert.equal(characterProfile.portrait_asset_id, portrait.id);
+  assert.equal(characterProfile.tile_asset_id, tile.id);
+  assert.equal(preferredArtAsset(library.db, 'character', character.id, 'portrait'), portrait.id, 'character galleries resolve portraits');
+  assert.equal(preferredArtAsset(library.db, 'character', character.id, 'tile'), tile.id, 'character headers resolve tiles');
+
 });
 
 test('renditions are deterministic, cached, and invalidated by crop changes', async (t) => {
@@ -136,20 +220,42 @@ test('renditions are deterministic, cached, and invalidated by crop changes', as
   assert.deepEqual(fs.readFileSync(blobPath), png, 'crop is never baked into the original');
 });
 
-test('transparency is preserved by alpha-preserving recipes', async (t) => {
+test('every built-in recipe carries transparency through, edges included', async (t) => {
   const { library, root, cleanup } = await makeTestLibrary();
   t.after(cleanup);
 
-  const png = await makePng({ width: 300, height: 200, alpha: true });
+  // A silhouette: opaque in the middle, fully transparent at the edges.
+  const width = 300;
+  const height = 200;
+  const raw = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      raw[i] = 220; raw[i + 1] = 120; raw[i + 2] = 60;
+      raw[i + 3] = Math.hypot(x - width / 2, y - height / 2) < 60 ? 255 : 0;
+    }
+  }
+  const png = await sharp(raw, { raw: { width, height, channels: 4 } }).png().toBuffer();
   const asset = await importAsset(library, { buffer: png, filename: 'sprite.png', title: 'Sprite' });
 
-  const tile = await generateRendition(library, asset.currentVersionId, 'wide_tile_16x9');
-  const meta = await sharp(path.join(root, ...tile.path.split('/'))).metadata();
-  assert.equal(meta.hasAlpha, true, 'wide tile keeps alpha');
+  const recipes = listRecipes(library).filter((recipe) => recipe.format === 'webp');
+  assert.ok(recipes.length >= 6, 'the built-in recipes are present');
+  for (const recipe of recipes) {
+    const rendition = await generateRendition(library, asset.currentVersionId, recipe.id);
+    const file = path.join(root, ...rendition.path.split('/'));
+    const meta = await sharp(file).metadata();
+    assert.equal(meta.hasAlpha, true, `${recipe.id} keeps an alpha channel`);
+    const corner = await sharp(file).ensureAlpha().extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer();
+    assert.equal(corner[3], 0, `${recipe.id} leaves the transparent corner transparent, not matted`);
+  }
 
-  const square = await generateRendition(library, asset.currentVersionId, 'square');
-  const squareMeta = await sharp(path.join(root, ...square.path.split('/'))).metadata();
-  assert.equal(squareMeta.hasAlpha, false, 'cover square flattens');
+  // A recipe deliberately set to matte still mattes, onto its background.
+  updateRecipe(library, 'square', { preserveAlpha: false, background: '#ffffff' });
+  const matted = await generateRendition(library, asset.currentVersionId, 'square');
+  const mattedFile = path.join(root, ...matted.path.split('/'));
+  assert.equal((await sharp(mattedFile).metadata()).hasAlpha, false, 'the matting path still works');
+  const mattedCorner = await sharp(mattedFile).ensureAlpha().extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer();
+  assert.deepEqual([...mattedCorner].slice(0, 3), [255, 255, 255], 'matted onto the requested background');
 });
 
 test('archiving hides assets without touching bytes; audit finds unreferenced blobs', async (t) => {
@@ -202,6 +308,11 @@ test('unknown semantic roles are refused everywhere links are made', async (t) =
     () => setAssetLinks(library, asset.id, [{ entityId: nao.id, role: 'character.portait' }]),
     /not a World Hub semantic role/,
     'typo roles never become data',
+  );
+  assert.throws(
+    () => setAssetLinks(library, asset.id, [{ entityId: nao.id, role: 'character.sprite' }]),
+    /not a World Hub semantic role/,
+    'retired roles are refused like any other unknown role',
   );
   const tinyPng = await makePng({ width: 12, height: 12 });
   await assert.rejects(

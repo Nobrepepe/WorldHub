@@ -33,6 +33,9 @@ register('library.pickCreateLocation', {
   requiresLibrary: false,
   payload: v.none(),
   handler: async (ctx) => {
+    if (process.env.WORLDHUB_SMOKE_CREATE_DIRECTORY) {
+      return { directory: process.env.WORLDHUB_SMOKE_CREATE_DIRECTORY, suggestedName: 'Chooser Smoke Library' };
+    }
     const result = await dialog.showOpenDialog(ctx.mainWindow, {
       title: 'Choose where the new library folder will be created',
       defaultPath: app.getPath('documents'),

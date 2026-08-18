@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import sharp from 'sharp';
 
 import { createLibrary, openLibrary, closeLibrary } from '../electron/services/library-service.js';
@@ -29,6 +30,28 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'worldhub-smoke-'));
 const ctx = { library: null, userDataDir: path.join(scratch, 'userdata'), sendEvent() {} };
 
 try {
+  step('create through the library chooser and exercise visible routes');
+  const electron = path.join(process.cwd(), 'node_modules', '.bin', 'electron');
+  const chooserParent = path.join(scratch, 'chooser');
+  fs.mkdirSync(chooserParent, { recursive: true });
+  const chooserSmoke = spawnSync(electron, [
+    '--headless', '--disable-gpu', '--no-sandbox',
+    `--user-data-dir=${path.join(scratch, 'electron-userdata')}`,
+    '.',
+  ], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      WORLDHUB_SMOKE_CREATE_DIRECTORY: chooserParent,
+      ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+    },
+    encoding: 'utf8',
+    timeout: 30000,
+  });
+  if (chooserSmoke.status !== 0) {
+    throw new Error(`Chooser smoke exited ${chooserSmoke.status}:\n${chooserSmoke.stdout}\n${chooserSmoke.stderr}`);
+  }
+
   step('create a temporary library');
   await createLibrary(ctx, scratch, 'Smoke Library');
   const library = ctx.library;

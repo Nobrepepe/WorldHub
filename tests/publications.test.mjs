@@ -84,7 +84,7 @@ test('publishing creates a complete verified package with checksums over every f
 
   /* asset index maps exact versions; consumers never derive filenames */
   const assetIndex = JSON.parse(fs.readFileSync(path.join(packageDir, 'assets', 'index.json'), 'utf8'));
-  const naoEntry = assetIndex.find((entry) => entry.assetId === portraitA.id && entry.recipeId === 'card_3x4');
+  const naoEntry = assetIndex.find((entry) => entry.assetId === portraitA.id && entry.recipeId === 'portrait_3x4');
   assert.ok(naoEntry);
   assert.equal(naoEntry.versionId, portraitA.currentVersionId, 'exact asset version recorded');
   assert.ok(fs.existsSync(path.join(packageDir, ...naoEntry.path.split('/'))));
@@ -100,6 +100,43 @@ test('publishing creates a complete verified package with checksums over every f
   /* pointer */
   const pointer = readCurrentPointer(library, publication.productionSlug);
   assert.equal(pointer.publicationId, publication.id);
+});
+
+test('art with transparent edges reaches the package with its transparency intact', async (t) => {
+  const { library, root, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const { production, nao, portraitA } = await readyGallery(library);
+
+  // Replace Nao's portrait with a silhouette: opaque core, clear edges.
+  const width = 240;
+  const height = 320;
+  const raw = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      raw[i] = 200; raw[i + 1] = 90; raw[i + 2] = 40;
+      raw[i + 3] = Math.hypot(x - width / 2, y - height / 2) < 70 ? 255 : 0;
+    }
+  }
+  const cutout = await sharp(raw, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  const { addAssetVersion } = await import('../electron/services/asset-service.js');
+  await addAssetVersion(library, portraitA.id, { buffer: cutout, filename: 'nao-cutout.png' });
+
+  const publication = await publishProduction(library, production.id);
+  const packageDir = path.join(root, ...publication.directory.split('/'));
+  const index = JSON.parse(fs.readFileSync(path.join(packageDir, 'assets', 'index.json'), 'utf8'));
+
+  const exported = index.filter((entry) => entry.assetId === portraitA.id && entry.recipeId !== 'original');
+  assert.ok(exported.length > 0, 'the portrait ships in at least one recipe');
+  for (const entry of exported) {
+    const file = path.join(packageDir, ...entry.path.split('/'));
+    assert.equal(entry.mime, 'image/webp');
+    const meta = await sharp(file).metadata();
+    assert.equal(meta.hasAlpha, true, `${entry.recipeId} keeps an alpha channel in the package`);
+    const corner = await sharp(file).ensureAlpha().extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer();
+    assert.equal(corner[3], 0, `${entry.recipeId} is not matted onto a background in the package`);
+  }
+  assert.ok(nao, 'gallery cast intact');
 });
 
 test('packages are self-contained: actual roles, no dangling profile or document references, no archived relationships', async (t) => {
@@ -135,7 +172,7 @@ test('packages are self-contained: actual roles, no dangling profile or document
   const read = (rel) => JSON.parse(fs.readFileSync(path.join(packageDir, ...rel.split('/')), 'utf8'));
 
   const index = read('assets/index.json');
-  const naoPortrait = index.find((entry) => entry.assetId === portraitA.id && entry.recipeId === 'card_3x4');
+  const naoPortrait = index.find((entry) => entry.assetId === portraitA.id && entry.recipeId === 'portrait_3x4');
   assert.deepEqual(naoPortrait.roles, ['character.portrait'],
     'the exported roles are the actual allowed roles of the asset, not the whole contract list');
 

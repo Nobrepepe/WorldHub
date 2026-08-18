@@ -3,6 +3,7 @@ import { call } from '../ipc.js';
 import { getState } from '../store.js';
 import { artImg } from '../ui/art.js';
 import { navigate } from '../router.js';
+import { resolveEntityArt } from './detail-common.js';
 
 /** Home answers: "What in the library needs attention?" */
 export async function renderHome() {
@@ -14,6 +15,16 @@ export async function renderHome() {
     call('document.list', { limit: 5 }),
     call('production.list', {}),
   ]);
+  await Promise.all([
+    ...worlds.map(async (world) => {
+      const art = await resolveEntityArt(world, 'tile_16x9', 'cover');
+      Object.assign(world, { artUrl: art.url, artAssetId: art.assetId, artRecipeId: art.recipeId });
+    }),
+    ...characters.map(async (character) => {
+      const art = await resolveEntityArt(character, 'portrait_3x4', 'portrait');
+      Object.assign(character, { artUrl: art.url, artAssetId: art.assetId, artRecipeId: art.recipeId });
+    }),
+  ]);
 
   const headline = buildHeadline(counts, productions);
   const host = el('div', { class: 'main-inner wide' });
@@ -22,7 +33,7 @@ export async function renderHome() {
   const heroWorld = worlds.find((world) => world.artUrl);
   if (heroWorld) {
     host.append(el('div', { class: 'hero' },
-      artImg(heroWorld.artUrl, { alt: heroWorld.name, className: 'hero-art art-bleed' }),
+      artImg(heroWorld.artUrl, { alt: heroWorld.name, className: 'hero-art art-bleed', assetId: heroWorld.artAssetId, recipeId: heroWorld.artRecipeId }),
       el('div', { class: 'hero-glow' }),
     ));
   }
@@ -45,7 +56,7 @@ export async function renderHome() {
         onclick: () => navigate(`/world/${world.id}`),
         onkeydown: (e) => { if (e.key === 'Enter') navigate(`/world/${world.id}`); },
       },
-        artImg(world.artUrl, { alt: world.name }),
+        artImg(world.artUrl, { alt: world.name, assetId: world.artAssetId, recipeId: world.artRecipeId }),
         el('div', { class: 'g-name' }, world.name),
       ));
     }
@@ -61,7 +72,7 @@ export async function renderHome() {
         onclick: () => navigate(`/character/${character.id}`),
         onkeydown: (e) => { if (e.key === 'Enter') navigate(`/character/${character.id}`); },
       },
-        artImg(character.artUrl, { alt: character.name }),
+        artImg(character.artUrl, { alt: character.name, assetId: character.artAssetId, recipeId: character.artRecipeId }),
         el('div', { class: 'g-name' }, character.name),
         el('div', { class: 'g-sub' }, character.worldName ?? ' '),
       ));

@@ -32,13 +32,13 @@ A contract is a JSON document with `format: "world-hub-application-contract"` an
       "fields": [{ "id": "caption", "label": "Caption", "type": "shortText", "maxLength": 200 }],
       "assetSets": [{
         "id": "portrait", "label": "Portrait", "kinds": ["image"],
-        "roles": ["character.portrait"], "recipes": ["card_3x4", "thumbnail_square"], "exact": 1
+        "roles": ["character.portrait"], "recipes": ["portrait_3x4", "thumbnail_square"], "exact": 1
       }]
     }
   ],
   "assetSets": [],
   "documents": { "mode": "linked" },
-  "requiredRecipes": ["card_3x4", "thumbnail_square"]
+  "requiredRecipes": ["portrait_3x4", "thumbnail_square"]
 }
 ```
 
@@ -133,7 +133,7 @@ All JSON in a package is deterministic: recursively sorted keys, stable record o
 
 - `entities.json` — every included record: `id`, `type`, `worldId`, `name`, `slug`, `summary`, `status`, `sortOrder`, `revision`, `aliases[]`, `tags[]`.
 - `worlds.json` — world profiles: `id`, `tagline`, `genre`, `tone`, `settingDescription`, `visualDirection`, `coverAssetId`, `backgroundAssetId`. Profile asset references are `null` unless that asset ships in this package — a package never contains dangling references.
-- `characters.json` — character profiles: `id`, `role`, `age` (text), `appearance`, `personality`, `biography`, `voice`, `portraitAssetId`, `fullBodyAssetId` (same self-containment rule).
+- `characters.json` — character profiles: `id`, `role`, `age` (text), `appearance`, `personality`, `biography`, `voice`, `portraitAssetId`, `tileAssetId` (same self-containment rule).
 - `relationships.json` — directed, non-archived records whose both endpoints are included: `id`, `sourceId`, `targetId`, `type`, `label`, `inverseLabel`, `description`, `position`.
 - `tags.json` — `id`, `name`, `group` for every tag used in the snapshot.
 - `documents.json` — `id`, `title`, `path` (inside the package), `status`, `revision`, `wordCount`, `checksum`, `entityIds[]` (filtered to records this package includes). The Markdown bodies are real files under `documents/`.
@@ -156,12 +156,12 @@ One entry per (asset, recipe) pair:
   "setId": "portrait",
   "entityId": "…character-uuid-or-null…",
   "roles": ["character.portrait"],
-  "recipeId": "card_3x4",
+  "recipeId": "portrait_3x4",
   "mime": "image/webp",
   "width": 900,
   "height": 1200,
   "position": 0,
-  "path": "assets/files/<assetId>/<versionId>-card_3x4.webp"
+  "path": "assets/files/<assetId>/<versionId>-portrait_3x4.webp"
 }
 ```
 

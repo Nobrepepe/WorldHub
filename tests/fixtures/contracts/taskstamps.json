@@ -21,7 +21,7 @@
           "label": "World cover",
           "kinds": ["image"],
           "roles": ["world.cover"],
-          "recipes": ["landscape_16x9", "thumbnail_square"],
+          "recipes": ["tile_16x9", "thumbnail_square"],
           "exact": 1,
           "hint": "Shown in the world library and pickers."
         }
@@ -58,7 +58,7 @@
           "id": "default_sound",
           "label": "Signature sound",
           "kinds": ["audio"],
-          "roles": ["audio.character_cue"],
+          "roles": ["audio.cue"],
           "min": 0,
           "max": 1,
           "hint": "Optional. Played when a stamp without its own sound is placed."
@@ -88,5 +88,5 @@
   ],
   "assetSets": [],
   "documents": { "mode": "none" },
-  "requiredRecipes": ["landscape_16x9", "square", "thumbnail_square"]
+  "requiredRecipes": ["tile_16x9", "square", "thumbnail_square"]
 }
