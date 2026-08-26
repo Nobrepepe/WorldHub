@@ -96,6 +96,40 @@
 .page-head h1 { margin-bottom: 0.4rem; }
 .page-lede { color: var(--text-dim); max-width: 44rem; }
 
+/* ---- the named way back ---- */
+
+/* A detail screen is somewhere you walked to, so its exit is written as
+   the room it returns to. It is a label in the eyebrow voice, not a
+   control panel: no box, no fill, and no amber — that thread is spent
+   on the primary action. */
+.back-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  max-width: 24rem;
+  font-size: calc(0.6875rem * var(--text-scale));
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  transition: color 120ms ease;
+}
+.back-link:hover, .back-link:focus-visible { color: var(--text); }
+.back-link .back-mark {
+  flex: 0 0 auto;
+  transition: transform calc(140ms * var(--motion, 1)) ease;
+}
+.back-link:hover .back-mark { transform: translateX(-2px); }
+.back-link .back-where {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Standing in the document rather than on art, it needs enough air to
+   read as the way out and not as a second eyebrow on the same block. */
+.page-head > .back-link { margin-bottom: 1.35rem; }
+
 /* ---- text tabs with active underline ---- */
 
 .tabs {

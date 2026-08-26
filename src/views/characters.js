@@ -163,8 +163,8 @@ export async function renderCharacterDetail({ id }) {
     };
     const p = entity.profile;
     const artSection = await displayArtSection(entity, [
-      { label: 'Portrait', role: 'character.portrait', profileKey: 'portraitAssetId', dbKey: 'portrait_asset_id', recipeId: 'full_body_9x16' },
-      { label: 'Tile', role: 'character.tile', profileKey: 'tileAssetId', dbKey: 'tile_asset_id', recipeId: 'tile_16x9' },
+      { label: 'Portrait', role: 'character.portrait', profileKey: 'portraitAssetId', dbKey: 'portrait_asset_id' },
+      { label: 'Tile', role: 'character.tile', profileKey: 'tileAssetId', dbKey: 'tile_asset_id' },
     ], (updated) => { entity = updated; navigate(`/character/${entity.id}`); });
     container.append(
       el('div', { style: { display: 'flex', justifyContent: 'flex-end' } }, saver.stateEl),

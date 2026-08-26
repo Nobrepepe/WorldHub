@@ -1,4 +1,4 @@
-import { el, clear, formatDate } from '../ui/dom.js';
+import { el, append, clear, formatDate } from '../ui/dom.js';
 import { call, callSafe } from '../ipc.js';
 import { navigate } from '../router.js';
 import { textInput, selectInput } from '../ui/forms.js';
@@ -8,6 +8,7 @@ import { renderMarkdown } from '../ui/markdown.js';
 import { pickEntity } from '../ui/entity-picker.js';
 import { openOverlay, confirmOverlay } from '../ui/overlay.js';
 import { showToast } from '../ui/toast.js';
+import { backLink } from '../ui/back-link.js';
 
 /* ---------------- documents browser ---------------- */
 
@@ -261,10 +262,10 @@ export async function renderDocumentDetail({ id }) {
       if (index > 0) linksHost.append(', ');
       linksHost.append(el('a', {
         href: `#${link.type === 'world' ? `/world/${link.id}` : link.type === 'character' ? `/character/${link.id}` : `/entry/${link.id}`}`,
-      }, link.name));
+      }, link.name || 'Untitled record'));
       if (!readOnly) {
         linksHost.append(el('button', {
-          class: 'btn', style: { padding: '0 0.3rem' }, 'aria-label': `Unlink ${link.name}`,
+          class: 'btn', style: { padding: '0 0.3rem' }, 'aria-label': `Unlink ${link.name || 'untitled record'}`,
           onclick: async () => {
             const updated = await callSafe('document.setLinks', { id: doc.id, entityIds: doc.links.filter((l) => l.id !== link.id).map((l) => l.id) });
             if (updated) { doc = { ...doc, ...updated }; renderLinks(); }
@@ -318,8 +319,11 @@ export async function renderDocumentDetail({ id }) {
     }, 'Restore to draft →') : null,
   );
 
-  host.append(
-    el('header', { class: 'page-head' },
+  /* The title here is an editable field rather than a headline, so the
+     header states the name the next screen's way back should carry. */
+  append(host, [
+    el('header', { class: 'page-head', 'data-screen-name': doc.title },
+      backLink(),
       el('span', { class: 'eyebrow' }, `Document · ${doc.path}`),
       titleInput,
       el('div', { class: 'toolbar', style: { marginTop: '0.4rem', marginBottom: '0' } },
@@ -344,7 +348,7 @@ export async function renderDocumentDetail({ id }) {
       panes,
     ),
     careActions,
-  );
+  ]);
 
   applyMode();
   if (doc.externallyChanged) conflictFlow();

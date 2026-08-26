@@ -116,6 +116,8 @@ register('asset.list', {
     status: v.optional(v.enum(['active', 'archived']), 'active'),
     text: v.optional(v.string({ max: 200 })),
     aspect: v.optional(v.enum(['wide', 'tall', 'square'])),
+    // Which rendition each thumbUrl should prefer when one already exists.
+    recipeId: v.optional(v.string({ min: 1, max: 100 }), 'tile_16x9'),
     limit: v.optional(v.integer({ min: 1, max: 2000 }), 500),
   }),
   handler: (ctx, payload) => listAssets(ctx.library, payload),

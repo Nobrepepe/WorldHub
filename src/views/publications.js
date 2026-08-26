@@ -1,4 +1,4 @@
-import { el, clear, formatBytes, formatDate } from '../ui/dom.js';
+import { el, append, clear, formatBytes, formatDate } from '../ui/dom.js';
 import { call, callSafe } from '../ipc.js';
 import { navigate } from '../router.js';
 import { getState } from '../store.js';
@@ -74,7 +74,7 @@ export async function renderPublishPreview({ id }) {
     const line = (label, list) => el('p', { class: 'dim' },
       el('strong', {}, `${label}: `), list.length > 0 ? list.join(', ') : 'none');
     const diff = preview.diff;
-    diffSection.append(
+    append(diffSection, [
       el('p', { class: 'section-note' }, `The active publication is from ${formatDate(diff.previousPublishedAt)}.`),
       line('Records added', diff.added),
       line('Records changed', diff.changed),
@@ -88,7 +88,7 @@ export async function renderPublishPreview({ id }) {
       diff.contractChanged ? el('p', { class: 'dim' }, el('strong', {}, 'The contract version changed since the last publication.')) : null,
       !diff.productionRevisionChanged && diff.added.length === 0 && diff.changed.length === 0 && diff.removed.length === 0
         ? el('p', { class: 'section-note' }, 'The production itself is unchanged since the active publication.') : null,
-    );
+    ]);
   }
   host.append(diffSection);
 

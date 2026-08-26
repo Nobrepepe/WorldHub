@@ -52,6 +52,22 @@ A recipe records dimensions, fit, output format, quality, alpha behavior, backgr
 
 `allow_upscale` is honored for every fit: when it is off (the default) and the original is smaller than the canvas, the rendition keeps the original's scale instead of being enlarged, and its true dimensions are recorded in the database and in `assets/index.json`. Enable upscaling on a recipe when exact canvas dimensions matter more than sharpness.
 
+## Role shapes
+
+A role has a customary shape. It is a convention, not a constraint — art that ignores it still belongs to the role and still publishes — but it is what the role is browsed and previewed at:
+
+| Role | Shape | Preview recipe |
+| --- | --- | --- |
+| `character.portrait` | 3:4 | `portrait_3x4` |
+| `character.tile` | 16:9 | `tile_16x9` |
+| `character.stamp` | 4:3 | `stamp_4x3` |
+| `character.collectible` | 1:1 | `square` |
+| `character.full_body` | 9:16 | `full_body_9x16` |
+| `object.icon` | 1:1 | `square` |
+| anything else | 16:9 | `tile_16x9` |
+
+A record's Assets tab puts its art in a folder per role and previews each folder at that role's shape, read from the recipe's own canvas so retuning a recipe moves its folders with it. The display-art choosers on the Profile tab preview through the same table, so a portrait is never shown cropped to some other role's frame. Previews are contained, never cropped, so a picture that does not follow the convention letterboxes and says so rather than being silently trimmed.
+
 ## Crops and determinism
 
 The rendition editor stores, per version and recipe: focal point (x/y in 0–1), zoom (1–8), pan, rotation, and an optional background color. Generation is deterministic — the fingerprint covers the original's checksum, every recipe parameter, and every crop parameter, so the same inputs always produce the same bytes. Changing a crop invalidates and removes the stale output for that version+recipe. The crop is never baked into the original.

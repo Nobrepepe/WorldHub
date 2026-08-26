@@ -89,6 +89,28 @@
 .gallery.portraits { grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
 .gallery.portraits .art, .gallery.portraits .no-art { aspect-ratio: 3 / 4; }
 
+/* ---- role folders (the Assets tab of a record) ---- */
+
+/* Folders sit closer together than free-standing sections: they are one
+   list of shelves, not six unrelated blocks. */
+.role-folder { margin: 1.4rem 0; }
+.role-folder > div[hidden] { display: none; }
+
+/* Each folder takes its shape from the recipe its role publishes at, set
+   as --tile-aspect on the grid. Art is contained, never cropped: framing
+   is the rendition editor's business, and a picture that ignores the
+   convention should look like it does. */
+.gallery.role-gallery {
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-min, 13rem), 1fr));
+  gap: 1.3rem 1.1rem;
+}
+.gallery.role-gallery .gallery-item .art,
+.gallery.role-gallery .gallery-item .no-art {
+  aspect-ratio: var(--tile-aspect, 16 / 9);
+  object-fit: contain;
+  object-position: center;
+}
+
 /* ---- detail hero ---- */
 
 .hero { position: relative; margin-bottom: 1.6rem; }
@@ -104,14 +126,27 @@
   pointer-events: none;
 }
 
-/* Detail headers have room to establish the setting. Keep the opaque
-   part of the fade close to the bottom so the composition stays visible. */
+/* Detail headers have room to establish the setting. The art is shown at
+   the shape it was rendered to — tile_16x9 is exactly 16:9 — so nothing
+   is cut off here: choosing what a cover shows belongs to the rendition
+   editor, never to the height a layout happened to pick.
+
+   On a short window the whole 16:9 band will not fit above the record's
+   name, so it scales down inside its column rather than being sliced;
+   the bleed mask fades its edges into the floor either way. */
 .detail-hero .hero-art {
-  height: clamp(21rem, 34vw, 26.5rem);
-  max-height: none;
-  object-position: center 38%;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  max-height: 70vh;
+  object-fit: contain;
+  object-position: center;
 }
-.detail-hero { margin-top: -2.2rem; }
+/* The art rides higher than ordinary content but does not touch the top
+   of the window: the application's own menu bar sits directly above the
+   page, and art flush against it reads as cut off rather than as bleed.
+   A little over a rem of floor is enough to separate them. */
+.detail-hero { margin-top: -0.6rem; }
 .detail-hero .hero-glow {
   height: 48%;
   background: linear-gradient(
@@ -123,12 +158,35 @@
   );
 }
 
-@media (max-width: 700px) {
-  .detail-hero .hero-art { height: clamp(17rem, 56vw, 22rem); }
+/* A short scrim at the top edge, the mirror of the glow at the bottom:
+   the label riding on the art gets a floor to read against, and the art
+   dissolves at both ends instead of stopping at a rectangle. */
+.detail-hero .hero-veil {
+  position: absolute; inset: 0 0 auto 0; height: 38%;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--bg) 78%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 34%, transparent) 42%,
+    transparent 100%
+  );
+  pointer-events: none;
 }
 
+.hero .back-link {
+  position: absolute;
+  top: 1.15rem;
+  left: 1.15rem;
+  z-index: 2;
+  color: var(--text-dim);
+  text-shadow: 0 1px 12px rgba(10, 8, 7, 0.9);
+}
+.hero .back-link:hover, .hero .back-link:focus-visible { color: var(--text); }
+
 @media (max-width: 980px) {
-  .detail-hero { margin-top: -3.2rem; }
+  /* Here the drawer's Menu control is fixed in the window's top-left
+     corner, so the art keeps the document's full top padding and starts
+     below it — which also lets the way back sit in its usual place. */
+  .detail-hero { margin-top: 0; }
 }
 
 /* ---- definition rows ---- */

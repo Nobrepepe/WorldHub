@@ -2,12 +2,14 @@ import { el, clear, formatDate } from '../ui/dom.js';
 import { call, callSafe } from '../ipc.js';
 import { field, textInput, textArea, selectInput, tagsInput } from '../ui/forms.js';
 import { createAutosaver } from '../ui/autosave.js';
-import { artImg } from '../ui/art.js';
+import { artImg, loadRenditionWhenVisible } from '../ui/art.js';
 import { navigate } from '../router.js';
 import { confirmOverlay } from '../ui/overlay.js';
 import { showToast } from '../ui/toast.js';
 import { getState } from '../store.js';
 import { openRelationshipEditor, relationshipRow } from './relationships.js';
+import { backLink } from '../ui/back-link.js';
+import { groupAssetsByRole, aspectForRecipe, ratioLabel, tileColumnRem, previewRecipeForRole } from '../ui/asset-roles.js';
 
 /**
  * Shared machinery for world, character, and entry detail screens:
@@ -17,10 +19,17 @@ import { openRelationshipEditor, relationshipRow } from './relationships.js';
 export function detailHeader(entity, { eyebrow }) {
   const head = el('header', { class: 'page-head' });
   if (entity.artUrl) {
+    /* The art owns the top of the window. The way back rides on it
+       rather than pushing it down, carried by a scrim of its own so the
+       label stays legible over a bright composition without a box. */
     head.append(el('div', { class: 'hero detail-hero' },
+      backLink(),
       artImg(entity.artUrl, { alt: entity.name, className: 'hero-art art-bleed', assetId: entity.artAssetId, recipeId: entity.artRecipeId }),
+      el('div', { class: 'hero-veil' }),
       el('div', { class: 'hero-glow' }),
     ));
+  } else {
+    head.append(backLink());
   }
   head.append(
     el('span', { class: 'eyebrow' }, eyebrow),
@@ -41,12 +50,15 @@ export async function displayArtSection(entity, slots, onChanged) {
   const host = el('div', { class: 'section' }, el('span', { class: 'eyebrow' }, 'Display art'));
   const readOnly = getState().library?.readOnly;
   for (const slot of slots) {
-    const candidates = await call('asset.list', { entityId: entity.id, role: slot.role, kind: 'image', status: 'active' });
+    // A slot previews at its role's own shape unless it names another,
+    // so the convention lives in one place and cannot drift per screen.
+    const recipeId = slot.recipeId ?? previewRecipeForRole(slot.role);
+    const candidates = await call('asset.list', { entityId: entity.id, role: slot.role, kind: 'image', status: 'active', recipeId });
     const selectedId = entity.profile[slot.dbKey] ?? '';
     const selected = candidates.find((asset) => asset.id === selectedId);
     const preview = el('div', { style: { marginTop: '0.5rem', maxWidth: slot.previewWidth ?? '18rem' } });
     if (selected) {
-      const rendition = await callSafe('rendition.generate', { versionId: selected.currentVersionId, recipeId: slot.recipeId });
+      const rendition = await callSafe('rendition.generate', { versionId: selected.currentVersionId, recipeId });
       preview.append(artImg(rendition?.url ?? selected.thumbUrl, { alt: `${entity.name} ${slot.label}` }));
     } else if (selectedId) {
       preview.append(el('p', { class: 'state-bad' }, 'The selected asset is archived or no longer associated under the required role. Choose a replacement or clear this selection.'));
@@ -197,31 +209,121 @@ export async function documentsSection(entity) {
   return host;
 }
 
-/** Assets linked to this entity. */
+/**
+ * Fold state for role folders, kept for the session so switching tabs or
+ * walking away to an asset and back does not reopen what was put away.
+ * Keyed by record and role, because a folder is only closed for the
+ * record it was closed on.
+ */
+const collapsedRoleFolders = new Set();
+
+/**
+ * Assets linked to this entity, in a folder per semantic role.
+ *
+ * Everything in one grid stops being browsable once a record carries a
+ * few dozen images, and one house crop misrepresents most of them. Each
+ * folder previews its art at the shape that role is published at.
+ */
 export async function assetsSection(entity) {
-  const assets = await callSafe('asset.list', { entityId: entity.id }) ?? [];
   const host = el('div', { class: 'section' });
+  const [assets, recipes] = await Promise.all([
+    callSafe('asset.list', { entityId: entity.id }).then((value) => value ?? []),
+    callSafe('recipe.list').then((value) => value ?? []),
+  ]);
   if (assets.length === 0) {
     host.append(el('p', { class: 'empty-state' }, 'No artwork or files are associated yet. File imports from the Inbox, or import directly on the Assets screen.'));
     return host;
   }
-  const gallery = el('div', { class: 'gallery portraits' });
+  const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+  const folders = groupAssetsByRole(assets);
+  for (const folder of folders) {
+    host.append(roleFolder(entity, folder, recipeById.get(folder.recipeId)));
+  }
+  return host;
+}
+
+/** One role's folder: a folding head, and a gallery cut to that shape. */
+function roleFolder(entity, folder, recipe) {
+  const foldKey = `${entity.id}:${folder.role}`;
+  const section = el('div', { class: 'section role-folder' });
+  const body = el('div', {});
+  const mark = el('span', { class: 'fold-mark' }, '▾');
+  const shape = ratioLabel(recipe);
+  const count = folder.assets.length;
+
+  let loaded = false;
+  const fill = async () => {
+    if (loaded) return;
+    loaded = true;
+    // Refetched under this one role so each preview arrives already cut
+    // to the role's recipe rather than flashing through the house crop.
+    const scoped = folder.role
+      ? await callSafe('asset.list', { entityId: entity.id, role: folder.role, recipeId: folder.recipeId })
+      : null;
+    clear(body);
+    body.append(roleGallery(scoped ?? folder.assets, folder.recipeId, recipe));
+  };
+
+  const fold = (collapsed) => {
+    if (collapsed) collapsedRoleFolders.add(foldKey);
+    else collapsedRoleFolders.delete(foldKey);
+    body.hidden = collapsed;
+    mark.textContent = collapsed ? '▸' : '▾';
+    header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    if (!collapsed) fill();
+  };
+  const header = el('button', {
+    class: 'btn fold-head', type: 'button', 'aria-expanded': 'true',
+    onclick: () => fold(!collapsedRoleFolders.has(foldKey)),
+  },
+    mark,
+    el('span', { class: 'eyebrow' }, folder.label),
+    el('span', { class: 'quiet' }, [`${count} ${count === 1 ? 'item' : 'items'}`, shape].filter(Boolean).join(' · ')),
+  );
+
+  section.append(header, body);
+  fold(collapsedRoleFolders.has(foldKey));
+  return section;
+}
+
+function roleGallery(assets, recipeId, recipe) {
+  const gallery = el('div', { class: 'gallery role-gallery', role: 'list' });
+  gallery.style.setProperty('--tile-aspect', aspectForRecipe(recipe));
+  gallery.style.setProperty('--tile-min', `${tileColumnRem(recipe)}rem`);
   for (const asset of assets) {
-    gallery.append(el('div', {
+    const art = asset.kind === 'image'
+      ? artImg(asset.thumbUrl, { alt: asset.title })
+      : el('div', { class: 'no-art' }, asset.kind.toUpperCase());
+    const tile = el('div', {
       class: 'gallery-item',
+      role: 'listitem',
       tabindex: '0',
-      role: 'link',
       'aria-label': asset.title,
       onclick: () => navigate(`/asset/${asset.id}`),
       onkeydown: (e) => { if (e.key === 'Enter') navigate(`/asset/${asset.id}`); },
     },
-      artImg(asset.thumbUrl, { alt: asset.title }),
+      art,
       el('div', { class: 'g-name' }, asset.title),
-      el('div', { class: 'g-sub' }, [asset.kind, ...(asset.roles ?? [])].join(' · ')),
-    ));
+      el('div', { class: 'g-sub' }, otherRolesLine(asset)),
+    );
+    gallery.append(tile);
+    if (asset.kind === 'image' && !getState().library?.readOnly) {
+      loadRenditionWhenVisible(tile, art, { versionId: asset.currentVersionId, recipeId });
+    }
   }
-  host.append(gallery);
-  return host;
+  return gallery;
+}
+
+/**
+ * Inside a role folder the folder already names the role, so the caption
+ * spends its line on what the folder cannot say: the kind, and any other
+ * role this same art also serves.
+ */
+function otherRolesLine(asset) {
+  const own = new Set(asset.entityRoles ?? []);
+  const elsewhere = (asset.roles ?? []).filter((role) => !own.has(role));
+  const extra = [...own].slice(1).concat(elsewhere);
+  return [asset.kind, ...extra].join(' · ');
 }
 
 /** Relationship list + editor for one entity. */

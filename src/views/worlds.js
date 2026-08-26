@@ -130,8 +130,8 @@ export async function renderWorldDetail({ id }) {
     };
     const p = entity.profile;
     const artSection = await displayArtSection(entity, [
-      { label: 'Cover', role: 'world.cover', profileKey: 'coverAssetId', dbKey: 'cover_asset_id', recipeId: 'tile_16x9' },
-      { label: 'Background', role: 'world.background', profileKey: 'backgroundAssetId', dbKey: 'background_asset_id', recipeId: 'tile_16x9' },
+      { label: 'Cover', role: 'world.cover', profileKey: 'coverAssetId', dbKey: 'cover_asset_id' },
+      { label: 'Background', role: 'world.background', profileKey: 'backgroundAssetId', dbKey: 'background_asset_id' },
     ], (updated) => { entity = updated; navigate(`/world/${entity.id}`); });
     container.append(
       baseHost,

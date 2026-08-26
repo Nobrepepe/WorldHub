@@ -1,4 +1,5 @@
 import { el } from './dom.js';
+import { callSafe } from '../ipc.js';
 
 /**
  * Managed art display. Never a broken-image icon: missing art renders
@@ -21,4 +22,27 @@ export function artImg(url, { alt = '', className = 'art', noArtClass = 'no-art'
     img.replaceWith(el('div', { class: noArtClass, role: 'img', 'aria-label': `${alt || 'Art'} — missing file` }, caption));
   });
   return img;
+}
+
+/**
+ * Swap a gallery tile over to its crop-aware rendition once the tile is
+ * near the viewport. Until then the list keeps whatever the server
+ * already had — the original bytes, or an older rendition.
+ */
+export function loadRenditionWhenVisible(tile, image, { versionId, recipeId }) {
+  if (!versionId || !recipeId || !image || image.tagName !== 'IMG') return;
+  const generate = async () => {
+    const rendition = await callSafe('rendition.generate', { versionId, recipeId });
+    if (rendition?.url && image.isConnected) image.src = rendition.url;
+  };
+  if (!('IntersectionObserver' in window)) {
+    generate();
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    observer.disconnect();
+    generate();
+  }, { rootMargin: '200px' });
+  observer.observe(tile);
 }

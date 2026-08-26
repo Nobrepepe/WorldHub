@@ -119,6 +119,63 @@ test('character art roles are accepted and filterable', async (t) => {
   assert.deepEqual(listAssets(library, { role: 'character.collectible' }).map((asset) => asset.id), [collectible.id]);
 });
 
+test('a record and a role together name one link, and each asset reports its roles for that record', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const world = createEntity(library, { type: 'world', name: 'Shared World' });
+  const nao = createEntity(library, { type: 'character', name: 'Nao', worldId: world.id });
+  const bram = createEntity(library, { type: 'character', name: 'Bram', worldId: world.id });
+
+  // One picture serving two records under two different roles.
+  const shared = await importAsset(library, { buffer: await makePng(), filename: 'shared.png', title: 'Shared art' });
+  setAssetLinks(library, shared.id, [
+    { entityId: nao.id, role: 'character.portrait' },
+    { entityId: bram.id, role: 'character.tile' },
+  ]);
+  const naoTile = await importAsset(library, {
+    buffer: await makePng({ width: 80, height: 45 }), filename: 'nao-tile.png', title: 'Nao tile',
+    entityId: nao.id, role: 'character.tile',
+  });
+
+  assert.deepEqual(
+    listAssets(library, { entityId: nao.id, role: 'character.tile' }).map((a) => a.id),
+    [naoTile.id],
+    "Bram's tile role must not put the shared art in Nao's tile folder",
+  );
+  assert.deepEqual(
+    listAssets(library, { entityId: nao.id, role: 'character.portrait' }).map((a) => a.id),
+    [shared.id],
+  );
+
+  const forNao = listAssets(library, { entityId: nao.id }).find((a) => a.id === shared.id);
+  assert.deepEqual(forNao.entityRoles, ['character.portrait'], 'roles are reported for the record being browsed');
+  assert.deepEqual(forNao.roles.sort(), ['character.portrait', 'character.tile'], 'every role the asset holds is still reported');
+  assert.deepEqual(listAssets(library, {})[0].entityRoles, [], 'no record named, no per-record roles');
+});
+
+test('list previews prefer the rendition of the recipe the caller asked for', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const world = createEntity(library, { type: 'world', name: 'Preview World' });
+  const character = createEntity(library, { type: 'character', name: 'Preview Character', worldId: world.id });
+  const asset = await importAsset(library, {
+    buffer: await makePng({ width: 300, height: 400 }), filename: 'portrait.png', title: 'Portrait art',
+    entityId: character.id, role: 'character.portrait',
+  });
+
+  const blobUrl = listAssets(library, { entityId: character.id, recipeId: 'portrait_3x4' })[0].thumbUrl;
+  assert.match(blobUrl, /^worldhub:\/\/media\/blob\//, 'until one is generated, the original stands in');
+
+  const rendition = await generateRendition(library, asset.currentVersionId, 'portrait_3x4');
+  const listed = listAssets(library, { entityId: character.id, recipeId: 'portrait_3x4' })[0];
+  assert.equal(listed.thumbUrl, `worldhub://media/rendition/${rendition.id}`);
+  assert.match(
+    listAssets(library, { entityId: character.id })[0].thumbUrl,
+    /^worldhub:\/\/media\/blob\//,
+    'the default recipe has no rendition yet, so it does not borrow the portrait one',
+  );
+});
+
 test('display art supports automatic selection, explicit replacement, clearing, fallback and rendition regeneration', async (t) => {
   const { library, cleanup } = await makeTestLibrary();
   t.after(cleanup);

@@ -3,10 +3,11 @@ import { call, callSafe } from '../ipc.js';
 import { navigate } from '../router.js';
 import { textInput, selectInput, field, tagsInput } from '../ui/forms.js';
 import { getState } from '../store.js';
-import { artImg } from '../ui/art.js';
+import { artImg, loadRenditionWhenVisible } from '../ui/art.js';
 import { openOverlay, confirmOverlay } from '../ui/overlay.js';
 import { pickEntity } from '../ui/entity-picker.js';
 import { showToast } from '../ui/toast.js';
+import { backLink } from '../ui/back-link.js';
 import { createAutosaver } from '../ui/autosave.js';
 
 /* ---------------- assets gallery ---------------- */
@@ -59,7 +60,9 @@ export async function renderAssets() {
         el('div', { class: 'g-sub' }, [asset.kind, ...(asset.roles ?? [])].join(' · ') || ' '),
       );
       gallery.append(tile);
-      if (asset.kind === 'image' && !readOnly) loadLandscapeRenditionWhenVisible(tile, art, asset);
+      if (asset.kind === 'image' && !readOnly) {
+        loadRenditionWhenVisible(tile, art, { versionId: asset.currentVersionId, recipeId: 'tile_16x9' });
+      }
     }
     galleryHost.append(gallery);
   };
@@ -142,26 +145,6 @@ export async function renderAssets() {
   return host;
 }
 
-function loadLandscapeRenditionWhenVisible(tile, image, asset) {
-  const generate = async () => {
-    const rendition = await callSafe('rendition.generate', {
-      versionId: asset.currentVersionId,
-      recipeId: 'tile_16x9',
-    });
-    if (rendition && image.isConnected) image.src = rendition.url;
-  };
-  if (!('IntersectionObserver' in window)) {
-    generate();
-    return;
-  }
-  const observer = new IntersectionObserver((entries) => {
-    if (!entries.some((entry) => entry.isIntersecting)) return;
-    observer.disconnect();
-    generate();
-  }, { rootMargin: '200px' });
-  observer.observe(tile);
-}
-
 /* ---------------- asset detail ---------------- */
 
 export async function renderAssetDetail({ id }) {
@@ -176,8 +159,11 @@ export async function renderAssetDetail({ id }) {
 
   const current = asset.versions.find((v) => v.id === asset.currentVersionId) ?? asset.versions[0];
 
+  /* An asset screen leads with words, not with a bled cover, so its way
+     back stands above the naming line instead of over anything. */
   host.append(
     el('header', { class: 'page-head' },
+      backLink(),
       el('span', { class: 'eyebrow' }, `Asset · ${asset.kind}`),
       el('h1', {}, asset.title),
       el('p', { class: 'meta-line' },
@@ -194,17 +180,6 @@ export async function renderAssetDetail({ id }) {
   if (asset.kind === 'image' && asset.url) {
     const media = el('div', { class: 'section' },
       artImg(current.url, { alt: asset.title, className: 'asset-original-preview' }));
-    const bannerHost = el('div', {});
-    media.append(el('p', { style: { marginTop: '0.7rem' } }, el('button', {
-      class: 'btn',
-      onclick: async () => {
-        const rendition = await callSafe('rendition.generate', { versionId: current.id, recipeId: 'tile_16x9' });
-        bannerHost.replaceChildren(rendition
-          ? artImg(`${rendition.url}?t=${Date.now()}`, { alt: `${asset.title} as banner`, className: 'hero-art' })
-          : el('p', { class: 'state-bad' }, 'The banner preview could not be generated.'));
-      },
-    }, 'Preview as banner')),
-    bannerHost);
     host.append(media);
   } else if (asset.kind === 'audio' && current) {
     const audio = el('audio', { controls: true, src: current.url, style: { width: '100%', maxWidth: '30rem' } });

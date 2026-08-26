@@ -46,6 +46,48 @@ let renderHost = null;
 let onAfterRender = null;
 let listenerInstalled = false;
 
+/**
+ * Where the reader walked in from. A detail screen names its own way
+ * out, and a named exit has to be honest, so the trail remembers the
+ * screen actually left rather than guessing one from the URL.
+ */
+const trail = [];
+const TRAIL_LIMIT = 24;
+let currentScreen = null;
+let returning = false;
+
+/* The screen a record belongs to, when nothing was walked through to
+   reach it — a detail opened from search, or from a cold start. */
+const SECTION_SCREENS = {
+  world: { path: '/worlds', title: 'Worlds' },
+  character: { path: '/characters', title: 'Characters' },
+  entry: { path: '/entries', title: 'Entries' },
+  document: { path: '/documents', title: 'Documents' },
+  asset: { path: '/assets', title: 'Assets' },
+  contract: { path: '/contracts', title: 'Contracts' },
+  production: { path: '/productions', title: 'Productions' },
+  publication: { path: '/productions', title: 'Productions' },
+};
+
+/** The screen a way back leads to, and what that screen is called. */
+export function backDestination(path = currentPath()) {
+  const previous = trail[trail.length - 1];
+  if (previous && previous.path !== path) return previous;
+  const first = path.split('/').filter(Boolean)[0] ?? '';
+  return SECTION_SCREENS[first] ?? { path: '/home', title: 'Home' };
+}
+
+/** Walk back out to that screen, saving anything half-written first. */
+export async function goBack(path = currentPath()) {
+  returning = true;
+  await navigate(backDestination(path).path);
+}
+
+function screenTitle(path) {
+  const first = path.split('/').filter(Boolean)[0] ?? 'home';
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}
+
 function onHashChange() {
   renderCurrent().catch(console.error);
 }
@@ -80,6 +122,18 @@ export async function renderCurrent() {
   const sameScreen = state.route?.path === path;
   const keptScroll = sameScreen ? scroller?.scrollTop ?? 0 : null;
 
+  /* Walking out of a screen retires it from the trail; walking into a
+     new one files the screen being left behind. A redraw is neither. */
+  const wasReturning = returning;
+  returning = false;
+  if (!sameScreen) {
+    if (wasReturning) trail.pop();
+    else if (currentScreen && currentScreen.path !== path) {
+      trail.push(currentScreen);
+      if (trail.length > TRAIL_LIMIT) trail.shift();
+    }
+  }
+
   update({ route: { name: target.route.pattern, params: target.params, path } });
 
   const view = document.createElement('div');
@@ -105,4 +159,15 @@ export async function renderCurrent() {
     heading.setAttribute('tabindex', '-1');
     heading.focus({ preventScroll: true });
   }
+
+  // What this screen is called is the name the next screen's way back
+  // will carry. Usually that is the headline; a screen whose title is
+  // an editable field instead says so with data-screen-name.
+  const named = view.querySelector('[data-screen-name]');
+  currentScreen = {
+    path,
+    title: named?.getAttribute('data-screen-name')?.trim()
+      || heading?.textContent?.trim()
+      || screenTitle(path),
+  };
 }

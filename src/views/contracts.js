@@ -1,4 +1,4 @@
-import { el, clear, formatDate } from '../ui/dom.js';
+import { el, append, clear, formatDate } from '../ui/dom.js';
 import { call, callSafe } from '../ipc.js';
 import { navigate } from '../router.js';
 import { field, textInput, textArea, selectInput } from '../ui/forms.js';
@@ -110,7 +110,7 @@ export async function renderContractDetail({ id }) {
 
   const guidedTab = () => {
     const container = el('div', { style: { maxWidth: '48rem' } });
-    container.append(
+    append(container, [
       field('Name', textInput({ value: draft.name, onInput: (value) => { draft.name = value; }, ariaLabel: 'Contract name' })),
       field('Application type', textInput({ value: draft.appType, onInput: (value) => { draft.appType = value; }, ariaLabel: 'Application type' }),
         { hint: 'A stable lowercase identifier such as sticker-album.collection.' }),
@@ -129,7 +129,7 @@ export async function renderContractDetail({ id }) {
       selectionListEditor(draft, readOnly),
       el('hr', { class: 'rule' }),
       !readOnly ? el('button', { class: 'btn btn-primary', onclick: saveDraft }, 'Save as a new version →') : null,
-    );
+    ]);
     return container;
   };
 

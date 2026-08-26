@@ -283,15 +283,20 @@ export function setAssetLinks(library, assetId, links) {
   return getAsset(library, assetId);
 }
 
-export function listAssets(library, { entityId, role, kind, worldId, status = 'active', text, aspect, limit = 500 } = {}) {
+export function listAssets(library, { entityId, role, kind, worldId, status = 'active', text, aspect, recipeId = 'tile_16x9', limit = 500 } = {}) {
   const db = library.db;
   const where = ['a.status = ?'];
   const args = [status];
-  if (entityId) {
+  // A record and a role together name one link, not two independent
+  // conditions: art linked to Nao as a portrait and to Bram as a tile
+  // is not one of Nao's tiles.
+  if (entityId && role) {
+    where.push('EXISTS (SELECT 1 FROM asset_links l WHERE l.asset_id = a.id AND l.entity_id = ? AND l.role = ?)');
+    args.push(entityId, role);
+  } else if (entityId) {
     where.push('EXISTS (SELECT 1 FROM asset_links l WHERE l.asset_id = a.id AND l.entity_id = ?)');
     args.push(entityId);
-  }
-  if (role) {
+  } else if (role) {
     where.push('EXISTS (SELECT 1 FROM asset_links l WHERE l.asset_id = a.id AND l.role = ?)');
     args.push(role);
   }
@@ -325,9 +330,15 @@ export function listAssets(library, { entityId, role, kind, worldId, status = 'a
     updatedAt: row.updated_at,
     currentVersionId: row.current_version_id,
     roles: db.prepare('SELECT DISTINCT role FROM asset_links WHERE asset_id = ?').all(row.id).map((r) => r.role),
-    // Prefer the crop-aware gallery rendition when it has already been
-    // generated; the renderer lazily creates missing ones as tiles enter view.
-    thumbUrl: assetDisplayUrl(db, row.id, 'tile_16x9'),
+    // The roles this asset holds *for the record being browsed*, which is
+    // what a per-record view groups by. Empty when no record was named.
+    entityRoles: entityId
+      ? db.prepare('SELECT DISTINCT role FROM asset_links WHERE asset_id = ? AND entity_id = ? ORDER BY role').all(row.id, entityId).map((r) => r.role)
+      : [],
+    // Prefer the crop-aware rendition for the caller's recipe when it has
+    // already been generated; the renderer lazily creates missing ones as
+    // tiles enter view. Until then this is the original, uncropped.
+    thumbUrl: assetDisplayUrl(db, row.id, recipeId),
   }));
   if (aspect === 'wide') mapped = mapped.filter((a) => a.width && a.height && a.width / a.height > 1.2);
   else if (aspect === 'tall') mapped = mapped.filter((a) => a.width && a.height && a.height / a.width > 1.2);
