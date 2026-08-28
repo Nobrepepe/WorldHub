@@ -284,6 +284,23 @@
           "required": false
         },
         {
+          "id": "expreward_lead_min",
+          "label": "Character lead — shards, minimum",
+          "type": "integer",
+          "required": false,
+          "min": 1,
+          "max": 100,
+          "hint": "With a maximum set, routes using this package carry a character lead: the player chooses a revealed hero of the route’s world to receive the shards."
+        },
+        {
+          "id": "expreward_lead_max",
+          "label": "Character lead — shards, maximum",
+          "type": "integer",
+          "required": false,
+          "min": 1,
+          "max": 100
+        },
+        {
           "id": "expreward_entries",
           "label": "Entries",
           "type": "list",
@@ -452,6 +469,13 @@
             "type": "multilineText",
             "maxLength": 500
           }
+        },
+        {
+          "id": "exptpl_supply",
+          "label": "Guaranteed Field Supply route",
+          "type": "boolean",
+          "required": false,
+          "hint": "This route always carries one Field Supply and never rerolls. The first such template becomes the board’s guaranteed Supply route."
         }
       ],
       "hint": "Routes ride the shared Expedition cycle; there are no per-template durations."

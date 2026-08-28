@@ -13,7 +13,11 @@ const apps = {
   stickeralbum: 'StickerAlbum',
   herocollector: 'HeroCollector',
 };
+// Optional slugs on the command line sync only those consumers; with none
+// given, all four are re-copied.
+const only = process.argv.slice(2);
 for (const [slug, repo] of Object.entries(apps)) {
+  if (only.length && !only.includes(slug)) continue;
   const source = path.join(root, '..', repo, 'worldhub', 'application-contract.json');
   const target = path.join(root, 'tests', 'fixtures', 'contracts', `${slug}.json`);
   if (!fs.existsSync(source)) {
