@@ -234,8 +234,12 @@ async function mutateForV2(slug, library, built) {
 /* ---------------- main ---------------- */
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'worldhub-fixtures-'));
+// Optional slugs on the command line regenerate only those consumers'
+// fixtures; with none given, all four are rebuilt.
+const only = process.argv.slice(2);
 try {
   for (const [slug, builder] of Object.entries(CONSUMER_BUILDERS)) {
+    if (only.length && !only.includes(slug)) continue;
     const targetDir = TARGETS[slug];
     fs.mkdirSync(targetDir, { recursive: true });
     const ctx = { library: null, userDataDir: path.join(scratch, `ud-${slug}`), sendEvent() {} };

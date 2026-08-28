@@ -79,7 +79,7 @@ test('stickeralbum package carries 10 slots, itemFields, packs with nested distr
   assert.ok(index.some((entry) => entry.assetId === built.packArt.id && entry.recipeId === 'portrait_3x4'), 'pack art assetRef packaged with its recipe');
 });
 
-test('herocollector package carries nested campaign, archive, expedition, and crisis structures with their art', async (t) => {
+test('herocollector package carries nested campaign, relic, expedition, and crisis structures with their art', async (t) => {
   const { library, root, cleanup } = await makeTestLibrary();
   t.after(cleanup);
   const built = await buildHeroCollectorProduction(library);
@@ -91,10 +91,11 @@ test('herocollector package carries nested campaign, archive, expedition, and cr
   const worldValues = content.entityValues[worldId];
   assert.equal(worldValues.hc_campaign_nodes.length, 30);
   assert.equal(worldValues.hc_campaign_nodes[10].node_grade, 'improved');
-  assert.equal(worldValues.hc_archive_collections.length, 3, 'three archive collections');
-  assert.equal(worldValues.hc_archive_collections[0].col_relics.length, 5, 'five relics each');
-  assert.equal(worldValues.hc_archive_collections[0].col_reward_character, built.perCharacter[0].hero.id);
-  assert.ok(index.some((entry) => entry.assetId === built.relicArt.id), 'relic art from a nested list is packaged');
+  assert.equal(worldValues.hc_campaign_nodes[5].node_encounter_character, built.perCharacter[0].hero.id, 'world encounters name heroes');
+  assert.equal(worldValues.hc_relic_pieces.length, 4, 'the relic comes in four pieces');
+  assert.equal(worldValues.hc_relic_name, 'The Star Cage');
+  assert.equal(worldValues.hc_mastery_skins[0].ms_character, built.perCharacter[0].hero.id);
+  assert.ok(index.some((entry) => entry.assetId === built.relicArt.id), 'relic piece art from a nested list is packaged');
   assert.ok(index.some((entry) => entry.assetId === built.crisisArt.id && entry.recipeId === 'tile_16x9'), 'crisis art packaged with its recipe');
 
   assert.equal(content.values.hc_crises[0].crisis_fronts.length, 3);

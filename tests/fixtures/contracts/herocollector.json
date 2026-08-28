@@ -3,7 +3,7 @@
   "contractVersion": 1,
   "appType": "hero-collector.content-pack",
   "name": "Hero Collector — Content Pack",
-  "description": "A complete authored content pack: worlds with campaigns, headquarters, and archives; characters with acquisition setup, equipment lines, and skins; factions; the expedition library; and the crisis library. Mechanical definitions (balance, formulas, tier profiles, recipes) stay bundled with the game — enum fields here reference those bundled vocabularies.",
+  "description": "A complete authored content pack: worlds with campaigns, encounters, a four-piece relic, and Mastery skins; characters with acquisition setup, equipment lines, and skins; factions; the expedition library; and the crisis library. Mechanical definitions (balance, formulas, tier profiles, recipes) stay bundled with the game — enum fields here reference those bundled vocabularies.",
   "supportedProtocolVersions": [
     1
   ],
@@ -15,7 +15,7 @@
       "required": true,
       "minItems": 1,
       "maxItems": 20,
-      "hint": "Published chapter pairs drive progression. Thresholds must never decrease along the campaign.",
+      "hint": "Published chapters drive progression. Thresholds must never decrease along the campaign.",
       "fields": [
         {
           "id": "chapter_title",
@@ -106,119 +106,16 @@
                   "label": "Masterwork"
                 }
               ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "hc_shadow_chapters",
-      "label": "Shadow Campaign chapters",
-      "type": "list",
-      "required": true,
-      "minItems": 1,
-      "maxItems": 20,
-      "hint": "One per Main chapter. Every node is a shard source for a character.",
-      "fields": [
-        {
-          "id": "shadow_title",
-          "label": "Chapter title",
-          "type": "shortText",
-          "required": false,
-          "maxLength": 120
-        },
-        {
-          "id": "shadow_nodes",
-          "label": "Nodes — ten, in order",
-          "type": "list",
-          "required": true,
-          "minItems": 10,
-          "maxItems": 10,
-          "fields": [
-            {
-              "id": "snode_name",
-              "label": "Node name",
-              "type": "shortText",
-              "required": true,
-              "maxLength": 120
             },
             {
-              "id": "snode_threshold",
-              "label": "Power threshold",
-              "type": "integer",
-              "required": true,
-              "min": 0,
-              "max": 1000000
-            },
-            {
-              "id": "snode_family",
-              "label": "Material family",
-              "type": "enum",
-              "required": true,
-              "options": [
-                {
-                  "value": "metal",
-                  "label": "Metal"
-                },
-                {
-                  "value": "fiber",
-                  "label": "Fiber"
-                },
-                {
-                  "value": "mineral",
-                  "label": "Mineral"
-                },
-                {
-                  "value": "compound",
-                  "label": "Compound"
-                },
-                {
-                  "value": "mechanism",
-                  "label": "Mechanism"
-                },
-                {
-                  "value": "essence",
-                  "label": "Essence"
-                }
-              ]
-            },
-            {
-              "id": "snode_grade",
-              "label": "Material grade",
-              "type": "enum",
-              "required": true,
-              "options": [
-                {
-                  "value": "basic",
-                  "label": "Basic"
-                },
-                {
-                  "value": "improved",
-                  "label": "Improved"
-                },
-                {
-                  "value": "advanced",
-                  "label": "Advanced"
-                },
-                {
-                  "value": "superior",
-                  "label": "Superior"
-                },
-                {
-                  "value": "masterwork",
-                  "label": "Masterwork"
-                }
-              ]
-            },
-            {
-              "id": "snode_shard_character",
-              "label": "Shard character",
+              "id": "mnode_encounter_character",
+              "label": "Encounter — revealed hero",
               "type": "entityRef",
               "entityTypes": [
                 "character"
               ],
-              "required": true,
-              "hint": "Clearing this node awards shards of this character."
+              "required": false,
+              "hint": "Optional: the first clear reveals this hero as a Development Focus target and stakes 2 shards."
             }
           ]
         }
@@ -482,20 +379,6 @@
           "max": 4
         },
         {
-          "id": "exptpl_durations",
-          "label": "Durations (hours)",
-          "type": "list",
-          "required": false,
-          "maxItems": 4,
-          "item": {
-            "id": "exptpl_duration",
-            "label": "Hours",
-            "type": "integer",
-            "min": 1,
-            "max": 72
-          }
-        },
-        {
           "id": "exptpl_requirement_ids",
           "label": "Requirement ids",
           "type": "list",
@@ -570,7 +453,8 @@
             "maxLength": 500
           }
         }
-      ]
+      ],
+      "hint": "Routes ride the shared Expedition cycle; there are no per-template durations."
     },
     {
       "id": "hc_crises",
@@ -873,14 +757,6 @@
               "label": "Bonus world material runs"
             },
             {
-              "value": "world_expedition_renown_bp",
-              "label": "World expedition renown bonus"
-            },
-            {
-              "value": "next_hq_production_bp",
-              "label": "Next HQ production bonus"
-            },
-            {
               "value": "instant_intelligence",
               "label": "Instant intelligence"
             }
@@ -904,15 +780,6 @@
           "min": 1,
           "max": 100,
           "hint": "For quantity boons."
-        },
-        {
-          "id": "crisis_boon_bonus_bp",
-          "label": "Boon — basis points",
-          "type": "integer",
-          "required": false,
-          "min": 1,
-          "max": 30000,
-          "hint": "For percentage boons."
         },
         {
           "id": "crisis_boon_prose",
@@ -968,28 +835,6 @@
           "required": false,
           "min": 0,
           "max": 99
-        },
-        {
-          "id": "hc_asset_name",
-          "label": "World asset — name",
-          "type": "shortText",
-          "required": false,
-          "maxLength": 80,
-          "hint": "The world-specific resource, e.g. \"Chakra\"."
-        },
-        {
-          "id": "hc_asset_description",
-          "label": "World asset — description",
-          "type": "shortText",
-          "required": false,
-          "maxLength": 300
-        },
-        {
-          "id": "hc_asset_icon",
-          "label": "World asset — icon",
-          "type": "shortText",
-          "required": false,
-          "maxLength": 8
         },
         {
           "id": "hc_chapter_titles",
@@ -1090,48 +935,58 @@
               ]
             },
             {
-              "id": "node_shard_character",
-              "label": "Shard character",
+              "id": "node_encounter_character",
+              "label": "Encounter — revealed hero",
               "type": "entityRef",
               "entityTypes": [
                 "character"
               ],
               "required": false,
-              "hint": "Optional: clearing this node awards shards of this character."
+              "hint": "Optional: the first clear reveals this hero as a Development Focus target and stakes 2 shards. Must be a hero of this world."
             }
           ]
         },
         {
-          "id": "hc_hq_facilities",
-          "label": "Headquarters facilities",
-          "type": "list",
+          "id": "hc_relic_name",
+          "label": "Relic — name",
+          "type": "shortText",
+          "required": true,
+          "maxLength": 120,
+          "hint": "The world’s single major relic, reassembled from four pieces."
+        },
+        {
+          "id": "hc_relic_lore",
+          "label": "Relic — lore",
+          "type": "multilineText",
           "required": false,
-          "maxItems": 12,
+          "maxLength": 800
+        },
+        {
+          "id": "hc_relic_pieces",
+          "label": "Relic pieces — four, in order",
+          "type": "list",
+          "required": true,
+          "minItems": 4,
+          "maxItems": 4,
+          "hint": "Found by first-clearing World Campaign nodes 4, 9, 15, and 21, in this order.",
           "fields": [
             {
-              "id": "facility_id",
-              "label": "Facility id",
-              "type": "shortText",
-              "required": true,
-              "maxLength": 60
-            },
-            {
-              "id": "facility_name",
-              "label": "Name",
+              "id": "piece_name",
+              "label": "Piece name",
               "type": "shortText",
               "required": true,
               "maxLength": 120
             },
             {
-              "id": "facility_description",
-              "label": "Description",
+              "id": "piece_lore",
+              "label": "Piece lore",
               "type": "multilineText",
               "required": false,
-              "maxLength": 400
+              "maxLength": 600
             },
             {
-              "id": "facility_art",
-              "label": "Art",
+              "id": "piece_art",
+              "label": "Piece art",
               "type": "assetRef",
               "required": false,
               "assetKinds": [
@@ -1144,97 +999,56 @@
           ]
         },
         {
-          "id": "hc_hq_signature",
-          "label": "Headquarters signature perk",
-          "type": "shortText",
-          "required": false,
-          "maxLength": 60,
-          "hint": "A signature perk id the game understands, e.g. daily_free_reroll."
-        },
-        {
-          "id": "hc_archive_collections",
-          "label": "Archive collections",
+          "id": "hc_mastery_skins",
+          "label": "Mastery skins",
           "type": "list",
           "required": false,
-          "maxItems": 6,
-          "hint": "Relic collections in the world archive.",
+          "maxItems": 4,
+          "hint": "Cosmetic skins unlocked at Mastery ranks. Each references a skin declared on the character (its skin_id).",
           "fields": [
             {
-              "id": "col_name",
-              "label": "Collection name",
-              "type": "shortText",
+              "id": "ms_rank",
+              "label": "Rank",
+              "type": "enum",
               "required": true,
-              "maxLength": 120
-            },
-            {
-              "id": "col_relics",
-              "label": "Relics",
-              "type": "list",
-              "required": true,
-              "minItems": 1,
-              "maxItems": 10,
-              "fields": [
+              "options": [
                 {
-                  "id": "relic_name",
-                  "label": "Relic name",
-                  "type": "shortText",
-                  "required": true,
-                  "maxLength": 120
+                  "value": "known",
+                  "label": "Known"
                 },
                 {
-                  "id": "relic_lore",
-                  "label": "Relic lore",
-                  "type": "multilineText",
-                  "required": false,
-                  "maxLength": 600
+                  "value": "established",
+                  "label": "Established"
                 },
                 {
-                  "id": "relic_art",
-                  "label": "Relic art",
-                  "type": "assetRef",
-                  "required": false,
-                  "assetKinds": [
-                    "image"
-                  ],
-                  "recipes": [
-                    "square"
-                  ]
+                  "value": "rooted",
+                  "label": "Rooted"
+                },
+                {
+                  "value": "mastered",
+                  "label": "Mastered"
                 }
               ]
             },
             {
-              "id": "col_reward_character",
-              "label": "Reward skin — character",
+              "id": "ms_character",
+              "label": "Character",
               "type": "entityRef",
               "entityTypes": [
                 "character"
               ],
-              "required": false
+              "required": true,
+              "hint": "A hero of this world."
             },
             {
-              "id": "col_reward_skin_name",
-              "label": "Reward skin — name",
+              "id": "ms_skin_id",
+              "label": "Skin id",
               "type": "shortText",
-              "required": false,
-              "maxLength": 80
+              "required": true,
+              "maxLength": 60,
+              "hint": "The skin_id of one of that character’s declared skins."
             }
           ]
-        },
-        {
-          "id": "hc_full_reward_character",
-          "label": "Full-archive reward — character",
-          "type": "entityRef",
-          "entityTypes": [
-            "character"
-          ],
-          "required": false
-        },
-        {
-          "id": "hc_full_reward_skin_name",
-          "label": "Full-archive reward — skin name",
-          "type": "shortText",
-          "required": false,
-          "maxLength": 80
         }
       ],
       "assetSets": [
@@ -1251,21 +1065,6 @@
             "tile_16x9"
           ],
           "exact": 1
-        },
-        {
-          "id": "hc_hq_art",
-          "label": "Headquarters art",
-          "kinds": [
-            "image"
-          ],
-          "roles": [
-            "world.background"
-          ],
-          "recipes": [
-            "tile_16x9"
-          ],
-          "min": 0,
-          "max": 1
         },
         {
           "id": "hc_chapter_art",
@@ -1462,7 +1261,7 @@
               "type": "shortText",
               "required": true,
               "maxLength": 60,
-              "hint": "Stable id referenced by archive rewards."
+              "hint": "Stable id referenced by Mastery skin milestones."
             },
             {
               "id": "skin_name",
