@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import { register } from '../registry.js';
 import { v } from '../validate.js';
-import { PROTOCOL_VERSION, CONTRACT_VERSION } from '../../services/versions.js';
+import { PROTOCOL_VERSION, CONTRACT_FORMAT_VERSION } from '../../services/versions.js';
 
 register('app.versions', {
   requiresLibrary: false,
@@ -10,6 +10,6 @@ register('app.versions', {
     app: app.getVersion(),
     electron: process.versions.electron,
     protocol: PROTOCOL_VERSION,
-    contract: CONTRACT_VERSION,
+    contract: CONTRACT_FORMAT_VERSION,
   }),
 });

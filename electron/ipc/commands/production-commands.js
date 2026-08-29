@@ -1,8 +1,10 @@
+import { dialog } from 'electron';
 import { register } from '../registry.js';
 import { v } from '../validate.js';
 import {
   validateContractJson, createContract, updateContract, getContract, listContracts,
   setContractStatus, duplicateContract, installExampleContract,
+  importContractFile, contractDrift,
 } from '../../services/contract-service.js';
 import {
   createProduction, getProduction, updateProduction, setProductionValue, setSelection,
@@ -50,6 +52,29 @@ register('contract.duplicate', {
   requiresWrite: true,
   payload: v.object({ contractId: v.uuid() }),
   handler: (ctx, { contractId }) => duplicateContract(ctx.library, contractId),
+});
+
+register('contract.importFile', {
+  requiresWrite: true,
+  payload: v.object({ sourcePath: v.optional(v.nullable(v.string({ max: 4096 })), null) }),
+  handler: async (ctx, { sourcePath }) => {
+    let chosen = sourcePath ?? null;
+    if (!chosen) {
+      const result = await dialog.showOpenDialog(ctx.mainWindow, {
+        title: 'Import an application contract',
+        filters: [{ name: 'Application contract', extensions: ['json'] }],
+        properties: ['openFile'],
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      chosen = result.filePaths[0];
+    }
+    return importContractFile(ctx.library, chosen);
+  },
+});
+
+register('contract.drift', {
+  payload: v.object({ contractId: v.uuid() }),
+  handler: (ctx, { contractId }) => contractDrift(ctx.library, contractId),
 });
 
 register('contract.installExample', {

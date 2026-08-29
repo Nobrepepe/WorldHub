@@ -163,3 +163,34 @@ test('only the ticked scopes are touched', async (t) => {
   assert.equal(library.db.prepare('SELECT COUNT(*) n FROM entities').get().n, 1, 'the archived record was not ticked');
   assert.equal(archiveOverview(library).counts.entities, 1);
 });
+
+test('purging art a living record still points at clears the reference instead of dangling', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const world = createEntity(library, { type: 'world', name: 'Vel' });
+  const nao = createEntity(library, { type: 'character', name: 'Nao', worldId: world.id });
+  const png = await sharp({ create: { width: 60, height: 80, channels: 3, background: { r: 30, g: 60, b: 90 } } }).png().toBuffer();
+  const portrait = await importAsset(library, {
+    buffer: png, filename: 'portrait.png', title: 'Nao portrait',
+    entityId: nao.id, role: 'character.portrait',
+  });
+  const tile = await importAsset(library, {
+    buffer: png, filename: 'tile.png', title: 'Nao tile',
+    entityId: nao.id, role: 'character.tile',
+  });
+
+  const profileNow = () => library.db.prepare(
+    'SELECT portrait_asset_id, tile_asset_id FROM character_profiles WHERE entity_id = ?').get(nao.id);
+  assert.deepEqual(profileNow(), { portrait_asset_id: portrait.id, tile_asset_id: tile.id },
+    'both display slots are filled to begin with');
+
+  /* only the art is archived — the character it belongs to goes on living */
+  setAssetArchived(library, portrait.id, true);
+  setAssetArchived(library, tile.id, true);
+  purgeArchive(library, { scopes: ['assets'] });
+
+  assert.equal(library.db.prepare('SELECT COUNT(*) n FROM entities').get().n, 2, 'the records stay');
+  assert.deepEqual(profileNow(), { portrait_asset_id: null, tile_asset_id: null },
+    'every display slot that named the purged art is cleared, tile included');
+});

@@ -12,6 +12,7 @@ import { getProduction, validateProduction, setKey } from './production-service.
 import { generateRendition } from './asset-service.js';
 import { writeFileAtomic } from './atomic-file.js';
 import { PACKAGE_FORMAT, PROTOCOL_VERSION } from './versions.js';
+import { vocabularyVersion, renamedFrom } from './vocabulary.js';
 import { logError, logInfo } from './log-service.js';
 
 /**
@@ -391,6 +392,17 @@ export async function publishProduction(library, productionId) {
 
   /* 3. resolve exact revisions and versions */
   const snapshot = resolveSnapshot(library, productionId);
+
+  /* A contract states the package protocols its application can read. That
+     declaration was never checked, so nothing stopped a package going out in
+     a format the app on the other side would refuse. It is checked here,
+     where the author can still do something about it. */
+  const readable = snapshot.contract.supportedProtocolVersions ?? [1];
+  if (!readable.includes(PROTOCOL_VERSION)) {
+    throw domainError('publish.protocol_unsupported',
+      `${snapshot.contract.name} declares it can read World Hub package protocol ${readable.join(', ')}, but this library publishes protocol ${PROTOCOL_VERSION}. Update the application and its contract before publishing.`,
+      { supportedProtocolVersions: readable, protocolVersion: PROTOCOL_VERSION });
+  }
   const publicationId = crypto.randomUUID();
   const slug = snapshot.production.slug;
   const publishedAt = nowIso();
@@ -674,7 +686,15 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
       revision: production.revision,
     },
     applicationType: snapshot.contract.appType,
-    contract: { id: production.contractId, version: production.contractVersion },
+    /* `revision` counts edits to the contract record in this library. It is a
+       receipt, not a compatibility signal — a consumer records it and gates on
+       the embedded contract's `contractFormatVersion` instead. */
+    contract: { id: production.contractId, revision: production.contractVersion },
+    /* The role and recipe vocabulary these files were named under. A consumer
+       built against an older vocabulary refuses the package outright rather
+       than resolving art by a name that has since moved. */
+    vocabularyVersion: vocabularyVersion(),
+    renamedFrom: renamedFrom(),
     sourceLibraryId: library.descriptor.libraryId,
     publishedAt,
     entities: snapshot.entities.map(({ row }) => ({ id: row.id, type: row.type, revision: row.revision })),

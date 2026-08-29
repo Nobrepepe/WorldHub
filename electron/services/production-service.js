@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { domainError } from './errors.js';
 import { nowIso, inTransaction } from './database-service.js';
 import { recordActivity } from './activity-service.js';
-import { getContract } from './contract-service.js';
+import { getContract, contractDrift } from './contract-service.js';
 import { validateFieldValue, countBounds } from './field-engine.js';
 import { slugify } from './paths.js';
 import { assetDisplayUrl } from './asset-service.js';
@@ -451,7 +451,7 @@ export function validateProduction(library, id) {
   /* production-level fields */
   for (const def of contract.productionFields ?? []) {
     for (const problem of validateFieldValue(def, production.values[def.id], refs)) {
-      push('error', problem.code, problem.message, { kind: 'productionField', field: def.id }, 'fields');
+      push('error', problem.code, problem.message, { kind: 'productionField', field: def.id }, `fields:${def.id}`);
     }
   }
 
@@ -567,6 +567,15 @@ export function setProductionStatus(library, id, status) {
   const row = db.prepare('SELECT * FROM productions WHERE id = ?').get(id);
   if (!row) throw domainError('production.missing', 'That production no longer exists.');
   if (status === 'ready') {
+    /* A drifted contract is not a validation issue — the production may be
+       perfectly valid against a document the application has since moved on
+       from. Publishing that is how a package comes to ask for art under a
+       role the consumer stopped using, so it is refused here rather than
+       discovered at render time. */
+    const drift = contractDrift(library, row.contract_id);
+    if (drift.drifted) {
+      throw domainError('production.contract_drifted', drift.message, { drift });
+    }
     const result = validateProduction(library, id);
     if (result.errors > 0) {
       throw domainError('production.not_ready', `This production has ${result.errors} validation error(s) and cannot be marked ready.`, { issues: result.issues });

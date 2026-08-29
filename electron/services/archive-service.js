@@ -298,7 +298,7 @@ export function purgeArchive(library, { scopes = [], includePublications = false
       db.prepare('DELETE FROM asset_links WHERE asset_id = ?').run(asset.id);
       db.prepare(`DELETE FROM taggings WHERE subject_type = 'asset' AND subject_id = ?`).run(asset.id);
       db.prepare(`UPDATE character_profiles SET portrait_asset_id = NULL WHERE portrait_asset_id = ?`).run(asset.id);
-      db.prepare(`UPDATE character_profiles SET full_body_asset_id = NULL WHERE full_body_asset_id = ?`).run(asset.id);
+      db.prepare(`UPDATE character_profiles SET tile_asset_id = NULL WHERE tile_asset_id = ?`).run(asset.id);
       db.prepare(`UPDATE world_profiles SET cover_asset_id = NULL WHERE cover_asset_id = ?`).run(asset.id);
       db.prepare(`UPDATE world_profiles SET background_asset_id = NULL WHERE background_asset_id = ?`).run(asset.id);
       db.prepare(`UPDATE inbox_items SET filed_asset_id = NULL, filed_asset_version_id = NULL WHERE filed_asset_id = ?`).run(asset.id);

@@ -1,0 +1,49 @@
+{
+  "$comment": "The semantic roles and rendition recipes World Hub publishes under. This file is the source: electron/services/asset-service.js reads its roles from here, tests assert the recipe rows the migrations create match it, and the consumer kit ships it so an application can resolve art without hard-coding a single name. Bump vocabularyVersion whenever a role or recipe is renamed, retired, or changes geometry, and record the former name under renamedFrom so consumers can self-heal instead of rendering fallback art.",
+  "vocabularyVersion": 1,
+  "roles": [
+    { "id": "world.cover", "meaning": "The world's leading image" },
+    { "id": "world.background", "meaning": "Full-screen backdrop for the world" },
+    { "id": "location.background", "meaning": "Backdrop for a location" },
+    { "id": "character.portrait", "meaning": "Face-forward character image", "shape": "3:4", "previewRecipe": "portrait_3x4" },
+    { "id": "character.tile", "meaning": "Small identifying tile", "shape": "16:9", "previewRecipe": "tile_16x9" },
+    { "id": "character.full_body", "meaning": "Full-body artwork", "shape": "9:16", "previewRecipe": "full_body_9x16" },
+    { "id": "character.collectible", "meaning": "A collectible presentation of the character", "shape": "1:1", "previewRecipe": "square" },
+    { "id": "character.stamp", "meaning": "A wide framed stamp of the character", "shape": "4:3", "previewRecipe": "stamp_4x3" },
+    { "id": "object.icon", "meaning": "Icon for an object", "shape": "1:1", "previewRecipe": "square" },
+    { "id": "scene.key_art", "meaning": "Key art for a scene or moment" },
+    { "id": "audio.voice_line", "meaning": "A spoken line" },
+    { "id": "audio.cue", "meaning": "A musical or audio cue" },
+    { "id": "reference.art", "meaning": "Reference material, not for presentation" },
+    { "id": "reference.document", "meaning": "Reference file" }
+  ],
+  "recipes": [
+    { "id": "thumbnail_square", "name": "Thumbnail square", "width": 320, "height": 320, "fit": "contain" },
+    { "id": "square", "name": "Square", "width": 1024, "height": 1024, "fit": "cover" },
+    { "id": "tile_16x9", "name": "Tile 16:9", "width": 1600, "height": 900, "fit": "cover" },
+    { "id": "stamp_4x3", "name": "Stamp 4:3", "width": 1280, "height": 960, "fit": "cover" },
+    { "id": "full_body_9x16", "name": "Full body 9:16", "width": 900, "height": 1600, "fit": "cover" },
+    { "id": "portrait_3x4", "name": "Portrait 3:4", "width": 900, "height": 1200, "fit": "cover" },
+    { "id": "original", "name": "Original", "width": null, "height": null, "fit": "none" }
+  ],
+  "renamedFrom": {
+    "$comment": "current id -> every name it has previously been published under, oldest last. A consumer holding an old name finds the current one by reversing this map.",
+    "recipes": {
+      "portrait_3x4": ["card_3x4"],
+      "tile_16x9": ["landscape_16x9"],
+      "full_body_9x16": ["portrait_9x16"],
+      "stamp_4x3": ["wide_tile_16x9"]
+    },
+    "roles": {
+      "character.tile": ["character.identity_tile"],
+      "character.stamp": ["character.cowboy"],
+      "audio.cue": ["audio.character_cue"]
+    }
+  },
+  "retiredRoles": {
+    "$comment": "Roles that no longer exist. Links that carried them were moved to the role named here.",
+    "character.sprite": "reference.art",
+    "character.expression": "reference.art",
+    "character.gsi": "reference.art"
+  }
+}

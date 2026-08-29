@@ -2,8 +2,8 @@
 
 This document specifies the two data formats consuming applications interact with:
 
-1. **World Hub Application Contract, version 1** — how an application declares what it needs.
-2. **World Hub Package Protocol, version 1** — the immutable snapshot format World Hub publishes.
+1. **World Hub Application Contract, format version 1** — how an application declares what it needs.
+2. **World Hub Package Protocol, version 2** — the immutable snapshot format World Hub publishes.
 
 Consumers read packages. They never read the World Hub database, and they never write into a library.
 
@@ -11,12 +11,12 @@ Consumers read packages. They never read the World Hub database, and they never 
 
 ## 1. Application Contract, version 1
 
-A contract is a JSON document with `format: "world-hub-application-contract"` and `contractVersion: 1`. It is validated against `schemas/application-contract.schema.json` before saving or use. Contracts are data; they contain no code.
+A contract is a JSON document with `format: "world-hub-application-contract"` and `contractFormatVersion: 1`. It is validated against `schemas/application-contract.schema.json` before saving or use. Contracts are data; they contain no code.
 
 ```json
 {
   "format": "world-hub-application-contract",
-  "contractVersion": 1,
+  "contractFormatVersion": 1,
   "appType": "example.character-gallery",
   "name": "Example Character Gallery",
   "description": "One world, up to twelve characters, one portrait each.",
@@ -42,6 +42,21 @@ A contract is a JSON document with `format: "world-hub-application-contract"` an
 }
 ```
 
+### What belongs in a contract
+
+**The contract carries what a writer would change. The application's own repository carries what a designer would tune.**
+
+Names, lore, captions, art, and the choices that shape a scene are content. Power values, weights, ratios, thresholds, and anything measured in basis points are engine configuration, and they belong in the consuming application beside the rest of its balance data.
+
+The failure this prevents is quiet. A number with no author-visible meaning still has to be filled in by somebody, so it either sits in the production screen as noise or — worse — settles into the consumer's adapter as a hard-coded default, where the person authoring the content can neither see it nor change it. Hero Collector had ten such defaults living inside its adapter; they now sit in its `content/balance.json`, visible to whoever is actually balancing the game.
+
+Two practical tests:
+
+- *Would a writer with no interest in the mechanics have an opinion about this value?* If not, it is engine configuration.
+- *Does the number mean something about this particular item, or is it the same arithmetic applied per item?* Per-item meaning is content; repeated arithmetic is configuration with a default.
+
+A contract that has grown long is not automatically wrong — a game with thirty campaign nodes per world genuinely has a lot of content — but it should grow in fiction, not in tuning. Use `section` to group fields under headings and `advanced` on the ones an author rarely touches, so the production screen opens on what people came to write.
+
 ### Field types
 
 `shortText`, `multilineText`, `markdown`, `integer`, `number`, `boolean`, `enum` (requires `options`), `color` (`#rrggbb`), `entityRef` (requires `entityTypes`), `assetRef` (optional `assetKinds`, `assetRoles`), `list` (requires `item` for primitive lists or `fields` for ordered repeatable groups; `minItems`/`maxItems`).
@@ -64,9 +79,32 @@ An asset set declares allowed `kinds`, allowed semantic `roles` (see [ASSET_ROLE
 
 `documents.mode` is `"none"`, `"linked"` (documents linked to any included entity), or `"selected"` (only documents the author checked in the production editor).
 
+### The contract lives in the application's repository
+
+The authoritative copy of a contract is the file the consuming application keeps at `worldhub/application-contract.json`. World Hub imports it (`contract.importFile`) and records the path and the checksum of the bytes it read. Asking whether the two still agree costs a read and a hash and changes nothing.
+
+A production whose contract has drifted from that file **cannot be marked ready**. The remedy is to re-import, which is offered wherever the drift is reported. Contracts typed directly into World Hub are untracked rather than drifted — a state, not a fault.
+
 ### Versioning
 
-Saving a change creates a new contract version. A published snapshot embeds the full contract version it used; later contract edits never affect it.
+Saving a change creates a new contract *revision*. A published snapshot embeds the full contract it used; later edits never affect it. Importing a file whose content already matches the stored revision does not create a new one, so the counter measures real changes rather than re-reads.
+
+---
+
+## Version fields, and which to gate on
+
+Four numbers travel with a package. They answer different questions, and a consumer that confuses them fails in a way that looks like a content bug. Three of the four existing consumers gated on the wrong one at some point; one shipped it and had a real publication refused.
+
+| Field | Where | What it means | Consumer must |
+| --- | --- | --- | --- |
+| `protocolVersion` | `manifest.json` | the package *format* | **gate** — refuse an unsupported value |
+| `contractFormatVersion` | `production/contract.json` | the contract *document* format | **gate** — refuse an unsupported value |
+| `vocabularyVersion` | `manifest.json` | the role and recipe names in use | **gate** — refuse loudly rather than resolve art by a moved name |
+| `contract.revision` | `manifest.json` | how many times this contract has been edited | **never gate** — record it, display it, nothing else |
+
+`contract.revision` climbs every time the contract is edited in the authoring library — adding a field, renaming a recipe. None of that changes how a package is read. Gating on it refuses every publication after the next edit. It was called `contract.version` before Protocol 2; the rename exists so the mistake is harder to write.
+
+`manifest.renamedFrom` maps each current recipe and role id to the names it was previously published under, so a consumer holding an old name can find the current one instead of rendering a fallback. Resolve art through the recipes the *embedded contract* declares rather than through names written into application code; then a rename over here needs no change over there.
 
 ---
 
@@ -113,11 +151,13 @@ All JSON in a package is deterministic: recursively sorted keys, stable record o
 ```json
 {
   "format": "world-hub-package",
-  "protocolVersion": 1,
+  "protocolVersion": 2,
   "publicationId": "…uuid…",
   "production": { "id": "…", "name": "Vel Gallery", "slug": "vel-gallery", "revision": 7 },
   "applicationType": "example.character-gallery",
-  "contract": { "id": "…uuid…", "version": 2 },
+  "contract": { "id": "…uuid…", "revision": 2 },
+  "vocabularyVersion": 1,
+  "renamedFrom": { "recipes": { "tile_16x9": ["landscape_16x9"] }, "roles": { "character.tile": ["character.identity_tile"] } },
   "sourceLibraryId": "…uuid…",
   "publishedAt": "2026-08-13T22:41:00.000Z",
   "entities": [ { "id": "…", "type": "character", "revision": 4 } ],
@@ -181,8 +221,10 @@ SHA-256 of every other file in the package, keyed by package-relative path. A pa
 
 ```text
 read  <production-folder>/current.json          → publicationId, manifestPath
-read  manifest.json                             → verify format == "world-hub-package"
-                                                  and protocolVersion is supported
+read  manifest.json                             → verify format == "world-hub-package",
+                                                  protocolVersion is supported, and
+                                                  vocabularyVersion is supported.
+                                                  Record contract.revision; never gate on it.
 read  checksums.json; verify files you rely on
 read  catalog/entities.json (+ worlds/characters as needed), key records by id
 read  production/content.json                   → ordering and app-specific values

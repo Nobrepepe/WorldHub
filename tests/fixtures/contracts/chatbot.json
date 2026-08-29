@@ -1,10 +1,13 @@
 {
   "format": "world-hub-application-contract",
-  "contractVersion": 1,
+  "contractFormatVersion": 1,
   "appType": "chat-bot.cast",
   "name": "ChatBot — Cast",
   "description": "Worlds, locations, and characters for the roleplay chat app. Canonical profiles carry appearance, personality, biography, and voice; the fields here carry only AI-specific guidance that should never pollute canon. Linked Markdown documents become the lore available to prompt building.",
-  "supportedProtocolVersions": [1],
+  "supportedProtocolVersions": [
+    1,
+    2
+  ],
   "productionFields": [
     {
       "id": "cast_notes",
@@ -19,7 +22,9 @@
     {
       "id": "cb_worlds",
       "label": "Worlds",
-      "entityTypes": ["world"],
+      "entityTypes": [
+        "world"
+      ],
       "min": 1,
       "ordered": true,
       "hint": "The worlds conversations can be set in. Genre, tone, and setting come from the canonical world profile.",
@@ -37,18 +42,30 @@
         {
           "id": "cb_world_cover",
           "label": "World cover",
-          "kinds": ["image"],
-          "roles": ["world.cover"],
-          "recipes": ["tile_16x9"],
+          "kinds": [
+            "image"
+          ],
+          "roles": [
+            "world.cover"
+          ],
+          "recipes": [
+            "tile_16x9"
+          ],
           "min": 0,
           "max": 1
         },
         {
           "id": "session_background",
           "label": "Session background",
-          "kinds": ["image"],
-          "roles": ["world.background"],
-          "recipes": ["tile_16x9"],
+          "kinds": [
+            "image"
+          ],
+          "roles": [
+            "world.background"
+          ],
+          "recipes": [
+            "tile_16x9"
+          ],
           "min": 0,
           "max": 1,
           "hint": "Default backdrop behind conversations in this world."
@@ -58,7 +75,9 @@
     {
       "id": "cast",
       "label": "Characters",
-      "entityTypes": ["character"],
+      "entityTypes": [
+        "character"
+      ],
       "min": 1,
       "ordered": true,
       "hint": "Characters available for conversations. Appearance, personality, backstory, and voice come from the canonical profile.",
@@ -92,9 +111,15 @@
         {
           "id": "tile",
           "label": "Tile image",
-          "kinds": ["image"],
-          "roles": ["character.tile"],
-          "recipes": ["square"],
+          "kinds": [
+            "image"
+          ],
+          "roles": [
+            "character.tile"
+          ],
+          "recipes": [
+            "tile_16x9"
+          ],
           "min": 0,
           "max": 1,
           "hint": "Small identifying tile for pickers and lists."
@@ -102,9 +127,15 @@
         {
           "id": "sprites",
           "label": "Expression sprites",
-          "kinds": ["image"],
-          "roles": ["character.full_body"],
-          "recipes": ["full_body_9x16"],
+          "kinds": [
+            "image"
+          ],
+          "roles": [
+            "character.portrait"
+          ],
+          "recipes": [
+            "portrait_3x4"
+          ],
           "min": 0,
           "max": 12,
           "hint": "One image per expression. The neutral expression is used as the default sprite.",
@@ -124,7 +155,9 @@
     {
       "id": "places",
       "label": "Locations",
-      "entityTypes": ["location"],
+      "entityTypes": [
+        "location"
+      ],
       "min": 0,
       "ordered": true,
       "hint": "Optional canonical locations scenes can take place in.",
@@ -142,9 +175,15 @@
         {
           "id": "location_background",
           "label": "Location background",
-          "kinds": ["image"],
-          "roles": ["location.background"],
-          "recipes": ["tile_16x9"],
+          "kinds": [
+            "image"
+          ],
+          "roles": [
+            "location.background"
+          ],
+          "recipes": [
+            "tile_16x9"
+          ],
           "min": 0,
           "max": 1
         }
@@ -152,6 +191,11 @@
     }
   ],
   "assetSets": [],
-  "documents": { "mode": "linked" },
-  "requiredRecipes": ["tile_16x9", "square", "full_body_9x16"]
+  "documents": {
+    "mode": "linked"
+  },
+  "requiredRecipes": [
+    "tile_16x9",
+    "portrait_3x4"
+  ]
 }

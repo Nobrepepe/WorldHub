@@ -6,6 +6,7 @@ import Ajv from 'ajv';
 import { domainError } from './errors.js';
 import { nowIso } from './database-service.js';
 import { recordActivity } from './activity-service.js';
+import { stableJson } from './stable-json.js';
 
 /**
  * Application contracts are declarative JSON interpreted by the generic
@@ -27,8 +28,25 @@ function getValidator() {
   return validator;
 }
 
+/**
+ * Accept a contract that still names its format version the old way.
+ *
+ * `contractVersion` was renamed to `contractFormatVersion` because a
+ * contract record also carries a revision counter, and the two names were
+ * close enough that three of four consuming applications gated on the
+ * wrong one. Documents written before the rename still import; they are
+ * stored in the current shape.
+ */
+export function normalizeContractJson(contract) {
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)) return contract;
+  if (contract.contractFormatVersion !== undefined || contract.contractVersion === undefined) return contract;
+  const { contractVersion, ...rest } = contract;
+  return { ...rest, contractFormatVersion: contractVersion };
+}
+
 /** Structural validation plus duplicate-id and reference checks. */
-export function validateContractJson(contract) {
+export function validateContractJson(rawContract) {
+  const contract = normalizeContractJson(rawContract);
   const issues = [];
   const validate = getValidator();
   if (!validate(contract)) {
@@ -104,7 +122,8 @@ export function assertValidContract(contract) {
 }
 
 /** Save a brand-new contract as version 1. */
-export function createContract(library, contractJson) {
+export function createContract(library, rawContract) {
+  const contractJson = normalizeContractJson(rawContract);
   assertValidContract(contractJson);
   const db = library.db;
   const contractId = crypto.randomUUID();
@@ -117,7 +136,8 @@ export function createContract(library, contractJson) {
 }
 
 /** Changing a contract creates a new version; old versions remain. */
-export function updateContract(library, contractId, contractJson) {
+export function updateContract(library, contractId, rawContract) {
+  const contractJson = normalizeContractJson(rawContract);
   assertValidContract(contractJson);
   const db = library.db;
   const latest = db.prepare('SELECT MAX(version) v FROM application_contracts WHERE contract_id = ?').get(contractId)?.v;
@@ -148,6 +168,7 @@ function contractView(db, row) {
     name: row.name,
     status: row.status,
     createdAt: row.created_at,
+    sourcePath: row.source_path ?? null,
     contract: JSON.parse(row.json),
     versions,
   };
@@ -193,4 +214,114 @@ export function installExampleContract(library) {
   const existing = library.db.prepare('SELECT contract_id FROM application_contracts WHERE app_type = ?').get(example.appType);
   if (existing) return getContract(library, existing.contract_id);
   return createContract(library, example);
+}
+
+/* ---------------- provenance: the file a contract came from ---------------- */
+
+const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
+
+function recordSource(db, contractId, version, sourcePath, checksum) {
+  db.prepare(`
+    UPDATE application_contracts SET source_path = ?, source_sha256 = ?
+    WHERE contract_id = ? AND version = ?
+  `).run(sourcePath, checksum, contractId, version);
+}
+
+/**
+ * Take a contract from the file its application keeps, which is the copy
+ * that application's own repository treats as authoritative.
+ *
+ * Contracts are keyed by `appType`: importing a file for an app already
+ * known here becomes a new version of that contract rather than a second
+ * one. A file whose content already matches the stored version records
+ * its provenance without bumping the version — the revision counter
+ * should measure real changes, not how many times a file was re-read.
+ */
+export function importContractFile(library, sourcePath) {
+  const absolute = path.resolve(sourcePath);
+  let raw;
+  try {
+    raw = fs.readFileSync(absolute);
+  } catch {
+    throw domainError('contract.source_unreadable', `That contract file could not be read: ${absolute}`);
+  }
+  let parsed;
+  try {
+    parsed = normalizeContractJson(JSON.parse(raw.toString('utf8')));
+  } catch {
+    throw domainError('contract.source_invalid_json', `${absolute} is not valid JSON.`);
+  }
+  assertValidContract(parsed);
+
+  const db = library.db;
+  const checksum = sha256(raw);
+  const existing = db.prepare(`
+    SELECT contract_id FROM application_contracts WHERE app_type = ? ORDER BY version DESC LIMIT 1
+  `).get(parsed.appType);
+
+  if (!existing) {
+    const created = createContract(library, parsed);
+    recordSource(db, created.contractId, created.version, absolute, checksum);
+    return { ...getContract(library, created.contractId), imported: 'created' };
+  }
+
+  const latest = getContract(library, existing.contract_id);
+  if (stableJson(latest.contract) === stableJson(parsed)) {
+    recordSource(db, latest.contractId, latest.version, absolute, checksum);
+    return { ...getContract(library, latest.contractId), imported: 'unchanged' };
+  }
+
+  const updated = updateContract(library, latest.contractId, parsed);
+  recordSource(db, updated.contractId, updated.version, absolute, checksum);
+  recordActivity(db, 'contract.imported', 'contract', updated.contractId, path.basename(absolute));
+  return { ...getContract(library, updated.contractId), imported: 'updated' };
+}
+
+/**
+ * Has the file this contract came from changed since it was imported?
+ *
+ * Answering costs a read and a hash and changes nothing, which is the
+ * point: the previous mechanism could only reveal drift by overwriting
+ * the evidence. A contract authored in the app is untracked rather than
+ * drifted — that is a state, not a fault.
+ */
+export function contractDrift(library, contractId) {
+  const row = library.db.prepare(`
+    SELECT * FROM application_contracts WHERE contract_id = ? ORDER BY version DESC LIMIT 1
+  `).get(contractId);
+  if (!row) throw domainError('contract.missing', 'That contract no longer exists.');
+
+  const clean = {
+    tracked: true, drifted: false, unverifiable: false,
+    sourcePath: row.source_path, reason: null, message: null,
+  };
+  if (!row.source_path) {
+    return {
+      tracked: false, drifted: false, unverifiable: false,
+      sourcePath: null, reason: null, message: null,
+    };
+  }
+  let raw;
+  try {
+    raw = fs.readFileSync(row.source_path);
+  } catch {
+    /* Not every machine holds every application — that is the whole reason the
+       repositories are separate. An absent file means the claim cannot be
+       checked here, which is worth saying and not worth blocking on: the
+       contract in this library is still the one that was imported, and nothing
+       on this machine has touched it. */
+    return {
+      ...clean,
+      unverifiable: true,
+      reason: 'unreachable',
+      message: `The contract file this was imported from is not on this machine (${row.source_path}), so it cannot be checked here. Publishing uses the version already imported.`,
+    };
+  }
+  if (sha256(raw) === row.source_sha256) return clean;
+  return {
+    ...clean,
+    drifted: true,
+    reason: 'changed',
+    message: `${row.source_path} has changed since version ${row.version} was imported. Re-import it so productions publish against what the application actually asks for.`,
+  };
 }

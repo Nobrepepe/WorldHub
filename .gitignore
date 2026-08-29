@@ -12,3 +12,7 @@ world-hub.sqlite3-wal
 world-hub.sqlite3-shm
 world-hub.lock
 *.AppImage
+
+# Python bytecode from the vendored kit reader
+__pycache__/
+*.pyc

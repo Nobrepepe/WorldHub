@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeTestLibrary } from './helpers.mjs';
+import { vocabularyVersion } from '../electron/services/vocabulary.js';
+import { PROTOCOL_VERSION } from '../electron/services/versions.js';
 import { validateContractJson } from '../electron/services/contract-service.js';
 import { validateProduction } from '../electron/services/production-service.js';
 import { verifyPublication } from '../electron/services/publication-service.js';
@@ -18,7 +20,8 @@ test('all four consumer contracts validate against Contract version 1', () => {
     const contract = loadConsumerContract(slug);
     const issues = validateContractJson(contract);
     assert.deepEqual(issues, [], `${slug}: ${JSON.stringify(issues, null, 2)}`);
-    assert.ok(contract.supportedProtocolVersions.includes(1));
+    assert.ok(contract.supportedProtocolVersions.includes(PROTOCOL_VERSION),
+      `${slug} must declare it can read the protocol this library publishes`);
   }
 });
 
@@ -35,7 +38,12 @@ for (const slug of SLUGS) {
     const manifest = JSON.parse(fs.readFileSync(
       path.join(root, ...built.publication.directory.split('/'), 'manifest.json'), 'utf8'));
     assert.equal(manifest.applicationType, loadConsumerContract(slug).appType);
-    assert.equal(manifest.protocolVersion, 1);
+    assert.equal(manifest.protocolVersion, 2);
+    assert.equal(manifest.vocabularyVersion, vocabularyVersion(),
+      'the package names the vocabulary its files were published under');
+    assert.ok(Number.isInteger(manifest.contract.revision),
+      'the contract revision is recorded as a receipt, under a name no one will gate on');
+    assert.equal('version' in manifest.contract, false, 'and the ambiguous old name is gone');
   });
 }
 
@@ -53,8 +61,17 @@ test('taskstamps package carries 15 ordered stamps and per-stamp sound numbers',
   assert.deepEqual(stamps.map((item) => item.assetId), built.perCharacter[0].stamps.map((asset) => asset.id), 'order preserved');
   const sounds = content.assetSets[`stamp_sounds:${hero.id}`];
   assert.equal(sounds[0].values.stamp_number, 5, 'per-stamp sound remembers its stamp');
+  /* Which recipe a stamp ships as is the contract's business, not this
+     test's. Reading it from the contract is the same rule the consuming
+     applications follow, and it means a rename needs no edit here. */
+  const stampRecipes = loadConsumerContract('taskstamps').entitySelections
+    .flatMap((selection) => selection.assetSets ?? [])
+    .find((set) => set.id === 'stamps').recipes;
   for (const stamp of stamps) {
-    assert.ok(index.some((entry) => entry.assetId === stamp.assetId && entry.recipeId === 'square'), 'stamp rendition packaged');
+    for (const recipeId of stampRecipes) {
+      assert.ok(index.some((entry) => entry.assetId === stamp.assetId && entry.recipeId === recipeId),
+        `stamp rendition packaged as ${recipeId}`);
+    }
   }
 });
 
@@ -76,7 +93,15 @@ test('stickeralbum package carries 10 slots, itemFields, packs with nested distr
 
   assert.equal(content.values.packs.length, 2);
   assert.equal(content.values.packs[0].pack_distribution[0].dist_selector, 'standard');
-  assert.ok(index.some((entry) => entry.assetId === built.packArt.id && entry.recipeId === 'portrait_3x4'), 'pack art assetRef packaged with its recipe');
+  /* Which recipe pack art ships as is the contract's business, not this
+     test's — the same rule the consuming applications follow. */
+  const packRecipes = loadConsumerContract('stickeralbum').productionFields
+    .flatMap((field) => field.fields ?? field.itemFields ?? [])
+    .find((field) => field.id === 'pack_image').recipes;
+  for (const recipeId of packRecipes) {
+    assert.ok(index.some((entry) => entry.assetId === built.packArt.id && entry.recipeId === recipeId),
+      `pack art assetRef packaged as ${recipeId}`);
+  }
 });
 
 test('herocollector package carries nested campaign, relic, expedition, and crisis structures with their art', async (t) => {
