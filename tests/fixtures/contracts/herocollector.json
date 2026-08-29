@@ -1,16 +1,18 @@
 {
   "format": "world-hub-application-contract",
-  "contractVersion": 1,
+  "contractFormatVersion": 1,
   "appType": "hero-collector.content-pack",
   "name": "Hero Collector — Content Pack",
   "description": "A complete authored content pack: worlds with campaigns, encounters, a four-piece relic, and Mastery skins; characters with acquisition setup, equipment lines, and skins; factions; the expedition library; and the crisis library. Mechanical definitions (balance, formulas, tier profiles, recipes) stay bundled with the game — enum fields here reference those bundled vocabularies.",
   "supportedProtocolVersions": [
-    1
+    1,
+    2
   ],
   "productionFields": [
     {
       "id": "hc_main_chapters",
       "label": "Main Campaign chapters",
+      "section": "Main campaign",
       "type": "list",
       "required": true,
       "minItems": 1,
@@ -124,6 +126,7 @@
     {
       "id": "hc_factions",
       "label": "Factions",
+      "section": "Factions",
       "type": "list",
       "required": false,
       "maxItems": 40,
@@ -150,28 +153,14 @@
           "type": "multilineText",
           "required": false,
           "maxLength": 400
-        },
-        {
-          "id": "faction_bonus_2_bp",
-          "label": "Bonus at 2 members (basis points)",
-          "type": "integer",
-          "required": false,
-          "min": 0,
-          "max": 10000
-        },
-        {
-          "id": "faction_bonus_3_bp",
-          "label": "Bonus at 3 members (basis points)",
-          "type": "integer",
-          "required": false,
-          "min": 0,
-          "max": 10000
         }
       ]
     },
     {
       "id": "hc_expedition_requirements",
       "label": "Expedition requirements",
+      "section": "Expedition rules",
+      "advanced": true,
       "type": "list",
       "required": false,
       "maxItems": 100,
@@ -221,6 +210,8 @@
     {
       "id": "hc_expedition_objectives",
       "label": "Expedition optional objectives",
+      "section": "Expedition rules",
+      "advanced": true,
       "type": "list",
       "required": false,
       "maxItems": 100,
@@ -259,6 +250,8 @@
     {
       "id": "hc_expedition_rewards",
       "label": "Expedition reward packages",
+      "section": "Expedition rewards",
+      "advanced": true,
       "type": "list",
       "required": false,
       "maxItems": 100,
@@ -276,12 +269,6 @@
           "type": "shortText",
           "required": true,
           "maxLength": 80
-        },
-        {
-          "id": "expreward_rare",
-          "label": "Rare package",
-          "type": "boolean",
-          "required": false
         },
         {
           "id": "expreward_lead_min",
@@ -359,6 +346,8 @@
     {
       "id": "hc_expedition_templates",
       "label": "Expedition templates",
+      "section": "Expedition rewards",
+      "advanced": true,
       "type": "list",
       "required": false,
       "maxItems": 100,
@@ -380,14 +369,6 @@
           "required": false
         },
         {
-          "id": "exptpl_weight",
-          "label": "Offer weight",
-          "type": "integer",
-          "required": false,
-          "min": 1,
-          "max": 100
-        },
-        {
           "id": "exptpl_party_size",
           "label": "Party size",
           "type": "integer",
@@ -407,14 +388,6 @@
             "type": "shortText",
             "maxLength": 60
           }
-        },
-        {
-          "id": "exptpl_requirement_count",
-          "label": "Requirements drawn",
-          "type": "integer",
-          "required": false,
-          "min": 0,
-          "max": 6
         },
         {
           "id": "exptpl_optional_ids",
@@ -483,6 +456,7 @@
     {
       "id": "hc_crises",
       "label": "Crisis definitions",
+      "section": "Crises",
       "type": "list",
       "required": false,
       "maxItems": 60,
@@ -528,22 +502,6 @@
           "recipes": [
             "tile_16x9"
           ]
-        },
-        {
-          "id": "crisis_weight",
-          "label": "Spawn weight",
-          "type": "integer",
-          "required": false,
-          "min": 1,
-          "max": 100
-        },
-        {
-          "id": "crisis_min_cleared",
-          "label": "Minimum cleared nodes",
-          "type": "integer",
-          "required": false,
-          "min": 0,
-          "max": 100
         },
         {
           "id": "crisis_fronts",
@@ -829,6 +787,7 @@
         {
           "id": "hc_world_icon",
           "label": "Icon",
+          "section": "Look",
           "type": "shortText",
           "required": false,
           "maxLength": 8,
@@ -837,24 +796,28 @@
         {
           "id": "hc_palette_primary",
           "label": "Palette — primary",
+          "section": "Look",
           "type": "color",
           "required": false
         },
         {
           "id": "hc_palette_accent",
           "label": "Palette — accent",
+          "section": "Look",
           "type": "color",
           "required": false
         },
         {
           "id": "hc_palette_dark",
           "label": "Palette — dark",
+          "section": "Look",
           "type": "color",
           "required": false
         },
         {
           "id": "hc_world_display_order",
           "label": "Display order",
+          "section": "Look",
           "type": "integer",
           "required": false,
           "min": 0,
@@ -863,6 +826,7 @@
         {
           "id": "hc_chapter_titles",
           "label": "Campaign chapter titles",
+          "section": "Campaign",
           "type": "list",
           "required": false,
           "minItems": 3,
@@ -877,6 +841,7 @@
         {
           "id": "hc_campaign_nodes",
           "label": "World campaign nodes",
+          "section": "Campaign",
           "type": "list",
           "required": true,
           "minItems": 30,
@@ -973,6 +938,7 @@
         {
           "id": "hc_relic_name",
           "label": "Relic — name",
+          "section": "Relic",
           "type": "shortText",
           "required": true,
           "maxLength": 120,
@@ -981,6 +947,7 @@
         {
           "id": "hc_relic_lore",
           "label": "Relic — lore",
+          "section": "Relic",
           "type": "multilineText",
           "required": false,
           "maxLength": 800
@@ -988,6 +955,7 @@
         {
           "id": "hc_relic_pieces",
           "label": "Relic pieces — four, in order",
+          "section": "Relic",
           "type": "list",
           "required": true,
           "minItems": 4,
@@ -1025,6 +993,7 @@
         {
           "id": "hc_mastery_skins",
           "label": "Mastery skins",
+          "section": "Mastery skins",
           "type": "list",
           "required": false,
           "maxItems": 4,
@@ -1121,6 +1090,7 @@
         {
           "id": "hc_archetype",
           "label": "Archetype",
+          "section": "Role",
           "type": "enum",
           "required": true,
           "options": [
@@ -1153,6 +1123,7 @@
         {
           "id": "hc_tier",
           "label": "Acquisition tier",
+          "section": "Role",
           "type": "enum",
           "required": true,
           "options": [
@@ -1173,12 +1144,14 @@
         {
           "id": "hc_starting",
           "label": "Starting character",
+          "section": "Role",
           "type": "boolean",
           "required": false
         },
         {
           "id": "hc_faction",
           "label": "Faction id",
+          "section": "Role",
           "type": "shortText",
           "required": false,
           "maxLength": 60,
@@ -1187,6 +1160,7 @@
         {
           "id": "hc_extra_tags",
           "label": "Extra tag ids",
+          "section": "Role",
           "type": "list",
           "required": false,
           "maxItems": 8,
@@ -1201,6 +1175,7 @@
         {
           "id": "hc_glyph",
           "label": "Glyph",
+          "section": "Look",
           "type": "shortText",
           "required": false,
           "maxLength": 4
@@ -1208,12 +1183,14 @@
         {
           "id": "hc_color",
           "label": "Accent color",
+          "section": "Look",
           "type": "color",
           "required": false
         },
         {
           "id": "hc_equipment",
           "label": "Equipment lines",
+          "section": "Equipment",
           "type": "list",
           "required": false,
           "maxItems": 6,
@@ -1275,6 +1252,7 @@
         {
           "id": "hc_skins",
           "label": "Skins",
+          "section": "Skins",
           "type": "list",
           "required": false,
           "maxItems": 10,

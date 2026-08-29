@@ -163,9 +163,13 @@ export async function buildTaskStampsProduction(library, { variant = 1 } = {}) {
     setAssetSetItems(library, production.id, { slot: 'portrait', entityId: hero.id, items: items([portrait]) });
     const stamps = [];
     for (let n = 1; n <= 15; n++) {
-      stamps.push(await importImage(library, `${hero.name} stamp ${n}`, { entityId: hero.id, role: 'character.collectible', seed: 1000 + index * 100 + n + (variant === 2 && n === 1 ? 9999 : 0) }));
+      stamps.push(await importImage(library, `${hero.name} stamp ${n}`, { entityId: hero.id, role: 'character.stamp', seed: 1000 + index * 100 + n + (variant === 2 && n === 1 ? 9999 : 0) }));
     }
     setAssetSetItems(library, production.id, { slot: 'stamps', entityId: hero.id, items: items(stamps) });
+    const boss = await importImage(library, `${hero.name} boss`, { entityId: hero.id, role: 'character.tile', seed: 700 + index * 20 + variant });
+    setAssetSetItems(library, production.id, { slot: 'boss_image', entityId: hero.id, items: items([boss]) });
+    const bossSound = await importSound(library, `${hero.name} defeat`, { entityId: hero.id, role: 'audio.cue', seed: 800 + index });
+    setAssetSetItems(library, production.id, { slot: 'boss_sound', entityId: hero.id, items: items([bossSound]) });
     const cue = await importSound(library, `${hero.name} cue`, { entityId: hero.id, role: 'audio.cue', seed: 300 + index });
     setAssetSetItems(library, production.id, { slot: 'default_sound', entityId: hero.id, items: items([cue]) });
     const line = await importSound(library, `${hero.name} stamp five line`, { entityId: hero.id, role: 'audio.voice_line', seed: 400 + index });
@@ -173,7 +177,7 @@ export async function buildTaskStampsProduction(library, { variant = 1 } = {}) {
       slot: 'stamp_sounds', entityId: hero.id,
       items: [{ assetId: line.id, values: { stamp_number: 5 } }],
     });
-    perCharacter.push({ hero, portrait, stamps, cue, line });
+    perCharacter.push({ hero, portrait, stamps, boss, bossSound, cue, line });
   }
   setProductionStatus(library, production.id, 'ready');
   const publication = await publishProduction(library, production.id);
@@ -209,8 +213,8 @@ export async function buildChatBotProduction(library, { variant = 1 } = {}) {
     setProductionValue(library, production.id, { scope: 'entity', entityId: hero.id, field: 'char_relationship_to_user', value: 'trusted friend' });
     const tile = await importImage(library, `${hero.name} tile`, { entityId: hero.id, role: 'character.tile', seed: 600 + index });
     setAssetSetItems(library, production.id, { slot: 'tile', entityId: hero.id, items: items([tile]) });
-    const neutral = await importImage(library, `${hero.name} neutral sprite`, { entityId: hero.id, role: 'character.full_body', seed: 700 + index * 10 });
-    const happy = await importImage(library, `${hero.name} happy sprite`, { entityId: hero.id, role: 'character.full_body', seed: 701 + index * 10 });
+    const neutral = await importImage(library, `${hero.name} neutral sprite`, { entityId: hero.id, role: 'character.portrait', seed: 700 + index * 10 });
+    const happy = await importImage(library, `${hero.name} happy sprite`, { entityId: hero.id, role: 'character.portrait', seed: 701 + index * 10 });
     setAssetSetItems(library, production.id, {
       slot: 'sprites', entityId: hero.id,
       items: [
@@ -278,8 +282,10 @@ export async function buildStickerAlbumProduction(library, { variant = 1 } = {})
   setSelection(library, production.id, 'album_characters', characters.map((hero) => hero.id));
   const perCharacter = [];
   for (const [index, hero] of characters.entries()) {
-    const portrait = await importImage(library, `${hero.name} album portrait`, { entityId: hero.id, role: 'character.portrait', seed: 900 + index * 30 + variant });
-    setAssetSetItems(library, production.id, { slot: 'char_portrait', entityId: hero.id, items: items([portrait]) });
+    const tile = await importImage(library, `${hero.name} album tile`, { entityId: hero.id, role: 'character.tile', seed: 900 + index * 30 + variant });
+    setAssetSetItems(library, production.id, { slot: 'char_tile', entityId: hero.id, items: items([tile]) });
+    const fullBody = await importImage(library, `${hero.name} album full body`, { entityId: hero.id, role: 'character.full_body', seed: 930 + index * 30 + variant });
+    setAssetSetItems(library, production.id, { slot: 'char_full_body', entityId: hero.id, items: items([fullBody]) });
     const stickers = [];
     const stickerItems = [];
     for (let n = 1; n <= 10; n++) {
@@ -294,7 +300,7 @@ export async function buildStickerAlbumProduction(library, { variant = 1 } = {})
       stickerItems.push({ assetId: art.id, values });
     }
     setAssetSetItems(library, production.id, { slot: 'stickers', entityId: hero.id, items: stickerItems });
-    perCharacter.push({ hero, portrait, stickers });
+    perCharacter.push({ hero, tile, fullBody, stickers });
   }
 
   setProductionStatus(library, production.id, 'ready');
@@ -344,7 +350,7 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
   /* production-level libraries */
   setProductionValue(library, production.id, {
     scope: 'production', field: 'hc_factions',
-    value: [{ faction_id: 'faction_emberguard', faction_name: 'Emberguard', faction_explanation: 'Sworn to the captive star.', faction_bonus_2_bp: 200, faction_bonus_3_bp: 400 }],
+    value: [{ faction_id: 'faction_emberguard', faction_name: 'Emberguard', faction_explanation: 'Sworn to the captive star.' }],
   });
   setProductionValue(library, production.id, {
     scope: 'production', field: 'hc_expedition_requirements',
@@ -357,7 +363,7 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
   setProductionValue(library, production.id, {
     scope: 'production', field: 'hc_expedition_rewards',
     value: [{
-      expreward_id: 'reward_basic', expreward_name: 'Ember Cache', expreward_rare: false,
+      expreward_id: 'reward_basic', expreward_name: 'Ember Cache',
       expreward_entries: [
         { rentry_kind: 'material', rentry_id: 'mat_metal_basic', rentry_amount: 4 },
         { rentry_kind: 'resource', rentry_id: 'intelligence', rentry_amount: 1 },
@@ -367,8 +373,8 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
   setProductionValue(library, production.id, {
     scope: 'production', field: 'hc_expedition_templates',
     value: [{
-      exptpl_id: 'tpl_ember_run', exptpl_world: world.id, exptpl_weight: 10, exptpl_party_size: 2,
-      exptpl_requirement_ids: ['req_scholars'], exptpl_requirement_count: 1,
+      exptpl_id: 'tpl_ember_run', exptpl_world: world.id, exptpl_party_size: 2,
+      exptpl_requirement_ids: ['req_scholars'],
       exptpl_optional_ids: ['obj_swift'], exptpl_reward_package: 'reward_basic', exptpl_power_ratio_bp: 10000,
       exptpl_titles: ['Ember Run'], exptpl_descriptions: ['A short supply run along the star canals.'],
     }],
@@ -378,7 +384,7 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
     scope: 'production', field: 'hc_crises',
     value: [{
       crisis_id: 'crisis_starfall', crisis_world: world.id, crisis_name: 'Starfall Warning',
-      crisis_opening: 'The cage hums off-key.', crisis_art: crisisArt.id, crisis_weight: 10, crisis_min_cleared: 3,
+      crisis_opening: 'The cage hums off-key.', crisis_art: crisisArt.id,
       crisis_fronts: [
         { front_id: 'front_gate', front_name: 'The Gate', front_description: 'Hold the gate.', front_favored_tags: ['tag_scholar'], front_power_local: 100, front_power_major: 300, front_power_world: 900, front_struggle_text: 'The gate held, barely.', front_success_text: 'The gate held.', front_excel_text: 'The gate never wavered.' },
         { front_id: 'front_canal', front_name: 'The Canals', front_description: 'Calm the canals.', front_favored_tags: ['tag_artisan'], front_power_local: 120, front_power_major: 320, front_power_world: 950, front_struggle_text: 'The canals steamed.', front_success_text: 'The canals calmed.', front_excel_text: 'The canals sang.' },

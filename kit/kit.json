@@ -1,0 +1,8 @@
+{
+  "$comment": "Identity of this World Hub consumer kit. kit-sync writes a copy of this next to the vendored files; verify refuses to run when the two disagree.",
+  "kitVersion": 1,
+  "protocolVersion": 2,
+  "readableProtocolVersions": [1, 2],
+  "contractFormatVersion": 1,
+  "vocabularyVersion": 1
+}

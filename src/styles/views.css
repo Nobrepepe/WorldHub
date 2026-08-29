@@ -41,6 +41,19 @@
 
 .fold-controls { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
 
+/* ---- named field sections in the production editor ---- */
+
+/* A contract describing a whole game can declare a hundred fields. Sections
+   give the author somewhere to put the ones they are not writing today. */
+.field-section {
+  border-left: 2px solid var(--rule, var(--muted-2));
+  padding-left: 0.9rem;
+  margin: 0.9rem 0;
+}
+.field-section > .fold-head { margin-bottom: 0.35rem; }
+.field-section .fold-body[hidden] { display: none; }
+.field-section .dim { color: var(--muted-2); font-size: calc(0.8rem * var(--text-scale)); }
+
 /* ---- one selected record in the production editor ---- */
 
 .record + .record { margin-top: 0.2rem; }

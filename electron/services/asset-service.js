@@ -9,6 +9,7 @@ import { recordActivity } from './activity-service.js';
 import { syncAssetIndex, removeFromIndex } from './search-service.js';
 import { classifyFile, wavDuration } from './file-signatures.js';
 import { tagsFor } from './entity-service.js';
+import { assetRoles } from './vocabulary.js';
 
 /**
  * Managed assets: content-addressed immutable blobs, logical assets,
@@ -16,22 +17,10 @@ import { tagsFor } from './entity-service.js';
  * deterministic generated renditions.
  */
 
-export const ASSET_ROLES = [
-  'world.cover',
-  'world.background',
-  'location.background',
-  'character.portrait',
-  'character.tile',
-  'character.full_body',
-  'character.collectible',
-  'character.stamp',
-  'object.icon',
-  'scene.key_art',
-  'audio.voice_line',
-  'audio.cue',
-  'reference.art',
-  'reference.document',
-];
+/* The vocabulary lives in kit/vocabulary.json, which is also what ships to
+   consuming applications — see ./vocabulary.js for why it is not restated
+   here. */
+export const ASSET_ROLES = assetRoles();
 
 const PREFERRED_SLOT_BY_ROLE = {
   'world.cover': ['world_profiles', 'cover_asset_id'],

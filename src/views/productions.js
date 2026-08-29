@@ -128,6 +128,7 @@ function validationSentence(state) {
  */
 const collapsedAssetSets = new Set();
 const collapsedRecords = new Set();
+const collapsedSections = new Set();
 
 /**
  * Scroll to whatever a validation issue points at, opening any fold
@@ -150,6 +151,78 @@ function revealDestination(destination) {
   anchor.scrollIntoView({ block: 'center', behavior: 'smooth' });
   anchor.classList.add('flash-target');
   setTimeout(() => anchor.classList.remove('flash-target'), 1800);
+}
+
+/* ---------------- field sections ---------------- */
+
+/**
+ * Group a contract's fields into the named, collapsible sections it asks for.
+ *
+ * A contract that describes a whole game can declare a hundred fields, and
+ * rendering them as one flat column makes the screen unusable for the person
+ * who came to write a character's name. Consecutive fields sharing a `section`
+ * are shown together under its heading; a section whose fields are marked
+ * `advanced` opens collapsed, so tuning is present without being in the way.
+ *
+ * Fields declaring no section are rendered plainly, exactly as before, so a
+ * contract that says nothing about sections looks unchanged.
+ */
+function groupFieldsBySection(defs) {
+  const groups = [];
+  for (const def of defs ?? []) {
+    const name = typeof def.section === 'string' && def.section.trim() ? def.section.trim() : null;
+    const last = groups[groups.length - 1];
+    if (last && last.name === name) last.defs.push(def);
+    else groups.push({ name, defs: [def] });
+  }
+  return groups;
+}
+
+/**
+ * A collapsible heading. `foldKey` keeps the author's choice for as long as
+ * the app is open, so a section does not spring back open under them after a
+ * commit redraws the screen.
+ */
+function sectionFold(label, foldKey, { startCollapsed = false, count = null } = {}) {
+  const body = el('div', { class: 'fold-body' });
+  const mark = el('span', { class: 'fold-mark', 'aria-hidden': 'true' }, '▾');
+  const header = el('button', {
+    class: 'btn fold-head', type: 'button', 'aria-expanded': 'true',
+  }, mark, el('span', { class: 'eyebrow' }, label),
+    count === null ? null : el('span', { class: 'dim' }, ` ${count}`));
+  const fold = (collapsed) => {
+    if (collapsed) collapsedSections.add(foldKey);
+    else collapsedSections.delete(foldKey);
+    body.hidden = collapsed;
+    mark.textContent = collapsed ? '▸' : '▾';
+    header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  };
+  header.onclick = () => fold(!collapsedSections.has(foldKey));
+  const group = el('div', { class: 'field-section' }, header, body);
+  group.reveal = () => fold(false);
+  /* A section the author has never touched follows the contract's advice;
+     once they have folded or unfolded it, their choice wins. */
+  const remembered = collapsedSections.has(foldKey);
+  fold(remembered || (startCollapsed && !collapsedSections.has(`${foldKey}:seen`)));
+  collapsedSections.add(`${foldKey}:seen`);
+  return { group, body, fold };
+}
+
+/** Render `defs` into `host`, honouring any sections they declare. */
+function appendFields(host, defs, foldPrefix, renderOne) {
+  for (const group of groupFieldsBySection(defs)) {
+    if (group.name === null) {
+      for (const def of group.defs) host.append(renderOne(def));
+      continue;
+    }
+    const advanced = group.defs.every((def) => def.advanced === true);
+    const { group: sectionEl, body } = sectionFold(group.name, `${foldPrefix}:${group.name}`, {
+      startCollapsed: advanced,
+      count: group.defs.length,
+    });
+    for (const def of group.defs) body.append(renderOne(def));
+    host.append(sectionEl);
+  }
 }
 
 export async function renderProductionDetail({ id }) {
@@ -226,11 +299,16 @@ export async function renderProductionDetail({ id }) {
   if ((contract.productionFields ?? []).length === 0) {
     fieldsSection.append(el('p', { class: 'section-note' }, 'This contract declares no production fields.'));
   }
-  for (const def of contract.productionFields ?? []) {
-    fieldsSection.append(fieldInput(def, production.values[def.id], async (value) => {
-      await callSafe('production.setValue', { id, scope: 'production', field: def.id, value });
-    }, { readOnly }));
-  }
+  appendFields(fieldsSection, contract.productionFields, `production:${id}`, (def) => (
+    /* "Go there →" needs to land on the field itself, not merely on the block
+       that holds it: a collapsed section would otherwise hide what the issue
+       is pointing at. Destinations read left to right, so `fields:<id>` still
+       falls back to the block when no such field is on screen. */
+    el('div', { id: `dest-fields:${def.id}` },
+      fieldInput(def, production.values[def.id], async (value) => {
+        await callSafe('production.setValue', { id, scope: 'production', field: def.id, value });
+      }, { readOnly }))
+  ));
 
   /* documents chosen explicitly, when the contract asks for it */
   let documentsSection = null;
@@ -376,6 +454,45 @@ async function contractPanel(production, { readOnly, reload }) {
   section.append(el('p', { class: 'meta-line' },
     `${production.contractName} v${production.contractVersion}`,
     behind ? ` · v${targets.latestOwnVersion} is available` : ' · this is the newest version'));
+
+  /* The application's own copy of the contract has moved since it was
+     imported. Publishing now would ship content answering a document the
+     application has left behind, so this says so here — where the work is
+     — and offers the whole remedy in one action. */
+  const drift = await callSafe('contract.drift', { contractId: production.contractId });
+  if (drift?.unverifiable) {
+    section.append(el('p', { class: 'section-note' }, drift.message));
+  }
+  if (drift?.drifted) {
+    section.append(el('div', { class: 'issue error', id: 'dest-contract-drift' },
+      el('span', { class: 'issue-sev' }, 'drifted'), ' ',
+      el('span', { class: 'issue-text' }, drift.message)));
+    if (!readOnly) {
+      section.append(el('div', { class: 'overlay-actions' },
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: async () => {
+            const imported = await callSafe('contract.importFile', { sourcePath: drift.sourcePath });
+            if (!imported) return;
+            if (imported.version === production.contractVersion) {
+              showToast('Contract re-imported. This production is already on that version.');
+              reload();
+              return;
+            }
+            /* Moving versions can drop values the new contract no longer
+               recognises, so it goes through the same panel as any other
+               rebind rather than deciding silently. */
+            const fresh = await callSafe('production.rebindTargets', { id: production.id });
+            if (!fresh) return;
+            rebindFlow(production, fresh, {
+              contractId: production.contractId,
+              contractVersion: imported.version,
+            }, reload);
+          },
+        }, 'Re-import and rebind →'),
+      ));
+    }
+  }
 
   if (readOnly) return section;
 
@@ -626,11 +743,11 @@ function recordBlock({ live, adopt, selection, entity, index, entities, readOnly
     ) : null,
   );
 
-  for (const def of selection.fields ?? []) {
-    detail.append(fieldInput(def, live().entityValues[entity.id]?.[def.id], async (value) => {
+  appendFields(detail, selection.fields, `record:${entity.id}`, (def) => (
+    fieldInput(def, live().entityValues[entity.id]?.[def.id], async (value) => {
       await callSafe('production.setValue', { id: productionId, scope: 'entity', entityId: entity.id, field: def.id, value });
-    }, { readOnly }));
-  }
+    }, { readOnly })
+  ));
   const assetSets = (selection.assetSets ?? []).map((set) => {
     const editor = assetSetEditor({
       live, adopt, set, entity, readOnly, compact: true, onFold,

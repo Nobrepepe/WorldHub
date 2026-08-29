@@ -11,6 +11,7 @@
  *   wrong-apptype.zip       manifest applicationType is another app's
  *   unsupported-protocol.zip manifest protocolVersion is 99
  *   traversal.zip           ZIP with ../ and absolute-path entries
+ *   legacy-protocol-1.zip   a Protocol 1 package using retired recipe names
  *   expected.json           ids and facts consumer tests assert against
  *
  * Fixtures are synthetic and deterministic in content (never the
@@ -33,22 +34,21 @@ import { updateEntity } from '../electron/services/entity-service.js';
 import { addAssetVersion } from '../electron/services/asset-service.js';
 import { setAssetSetItems, setProductionStatus } from '../electron/services/production-service.js';
 import { publishProduction, exportPublicationZip } from '../electron/services/publication-service.js';
-import { CONSUMER_BUILDERS, fixturePng } from '../tests/fixtures/consumer-fixtures.mjs';
+import { CONSUMER_BUILDERS, fixturePng, loadConsumerContract } from '../tests/fixtures/consumer-fixtures.mjs';
+import { buildAutoProduction } from './auto-production.mjs';
+import { vocabularyVersion, renamedFrom } from '../electron/services/vocabulary.js';
+import { PROTOCOL_VERSION } from '../electron/services/versions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECTS = path.join(__dirname, '..', '..');
-const TARGETS = {
-  taskstamps: path.join(PROJECTS, 'TaskStamps', 'tests', 'fixtures', 'worldhub'),
-  chatbot: path.join(PROJECTS, 'ChatBot', 'tests', 'fixtures', 'worldhub'),
-  stickeralbum: path.join(PROJECTS, 'StickerAlbum', 'tests', 'fixtures', 'worldhub'),
-  herocollector: path.join(PROJECTS, 'HeroCollector', 'tests', 'fixtures', 'worldhub'),
-};
-const WRONG_APPTYPE = {
-  taskstamps: 'sticker-album.collection',
-  chatbot: 'task-stamps.stamp-set',
-  stickeralbum: 'hero-collector.content-pack',
-  herocollector: 'chat-bot.cast',
-};
+/* Read from the kit's registry so registering a sixth consumer needs no edit
+   here — the previous hard-coded maps were four more places to forget. */
+const REGISTRY = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'kit', 'consumers.json'), 'utf8')).consumers;
+const TARGETS = Object.fromEntries(REGISTRY.map((entry) => (
+  [entry.slug, path.join(PROJECTS, entry.repo, 'tests', 'fixtures', 'worldhub')])));
+/** Another registered app's type, for the "package built for someone else" fixture. */
+const WRONG_APPTYPE = Object.fromEntries(REGISTRY.map((entry, index) => (
+  [entry.slug, REGISTRY[(index + 1) % REGISTRY.length].appType])));
 
 /* ---------------- zip helpers ---------------- */
 
@@ -106,6 +106,60 @@ function withManifest(entries, mutate) {
 }
 
 /* ---------------- adversarial variants ---------------- */
+
+/**
+ * A package shaped the way Protocol 1 wrote them, with one recipe published
+ * under the name it has since been renamed from.
+ *
+ * Every consumer keeps one so backward compatibility has a permanent subject.
+ * Before this existed, the only protocol 1 sample each app owned was its own
+ * `valid-v1.zip` — which stopped being one the moment its fixtures were
+ * regenerated, quietly taking the coverage with it.
+ */
+async function writeLegacyProtocol1(targetDir, validEntries) {
+  const out = new Map(validEntries);
+  const changed = new Set();
+  const rewriteJson = (name, mutate) => {
+    const value = JSON.parse(out.get(name).toString('utf8'));
+    const next = mutate(value) ?? value;
+    out.set(name, Buffer.from(`${JSON.stringify(next, null, 2)}\n`));
+    changed.add(name);
+  };
+
+  rewriteJson('manifest.json', (manifest) => {
+    manifest.protocolVersion = 1;
+    manifest.contract = { id: manifest.contract.id, version: manifest.contract.revision };
+    delete manifest.vocabularyVersion;
+    delete manifest.renamedFrom;
+  });
+  rewriteJson('production/contract.json', (contract) => {
+    contract.contractVersion = contract.contractFormatVersion;
+    delete contract.contractFormatVersion;
+    contract.supportedProtocolVersions = [1];
+  });
+  rewriteJson('catalog/characters.json', (characters) => {
+    for (const character of characters) {
+      character.fullBodyAssetId = character.tileAssetId ?? null;
+      delete character.tileAssetId;
+    }
+  });
+  /* publish whatever recipes have former names under those names */
+  const formerName = new Map();
+  for (const [current, names] of Object.entries(renamedFrom().recipes ?? {})) {
+    if (names.length > 0) formerName.set(current, names[0]);
+  }
+  rewriteJson('assets/index.json', (index) => {
+    for (const entry of index) {
+      const former = formerName.get(entry.recipeId);
+      if (former) entry.recipeId = former;
+    }
+  });
+
+  const checksums = JSON.parse(out.get('checksums.json').toString('utf8'));
+  for (const name of changed) checksums[name] = sha256(out.get(name));
+  out.set('checksums.json', Buffer.from(`${JSON.stringify(checksums, null, 2)}\n`));
+  await writeZip(path.join(targetDir, 'legacy-protocol-1.zip'), out);
+}
 
 async function writeAdversarial(targetDir, appSlug, validEntries) {
   /* corrupt checksum: flip bytes in the first packaged asset file */
@@ -211,8 +265,11 @@ async function mutateForV2(slug, library, built) {
   const target = slug === 'taskstamps' ? perCharacter[0].stamps[0]
     : slug === 'stickeralbum' ? perCharacter[0].stickers[0]
     : slug === 'chatbot' ? perCharacter[0].tile
-    : perCharacter[0].portrait;
-  await addAssetVersion(library, target.id, {
+    : slug === 'herocollector' ? perCharacter[0].portrait
+    : null;
+  /* A contract-derived production names no particular artwork, so there is
+     nothing meaningful to replace; the rename alone makes it a real update. */
+  if (target) await addAssetVersion(library, target.id, {
     buffer: await fixturePng(424242),
     filename: 'updated-art.png',
     note: 'v2 art',
@@ -221,9 +278,12 @@ async function mutateForV2(slug, library, built) {
   if (perCharacter.length > 1) {
     const slot = slug === 'taskstamps' ? 'stamp_characters'
       : slug === 'stickeralbum' ? 'album_characters'
-      : slug === 'chatbot' ? 'cast' : 'hc_characters';
-    const { setSelection } = await import('../electron/services/production-service.js');
-    setSelection(library, production.id, slot, [perCharacter[0].hero.id]);
+      : slug === 'chatbot' ? 'cast'
+      : slug === 'herocollector' ? 'hc_characters' : null;
+    if (slot) {
+      const { setSelection } = await import('../electron/services/production-service.js');
+      setSelection(library, production.id, slot, [perCharacter[0].hero.id]);
+    }
     if (slug === 'chatbot') {
       /* keep required per-entity values consistent — nothing to remove; values ride the selection */
     }
@@ -238,8 +298,12 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'worldhub-fixtures-'));
 // fixtures; with none given, all four are rebuilt.
 const only = process.argv.slice(2);
 try {
-  for (const [slug, builder] of Object.entries(CONSUMER_BUILDERS)) {
+  for (const { slug } of REGISTRY) {
     if (only.length && !only.includes(slug)) continue;
+    /* An established app has a builder asserting facts only it knows. A newly
+       registered one has none, and derives its production from its contract. */
+    const builder = CONSUMER_BUILDERS[slug]
+      ?? ((library) => buildAutoProduction(library, loadConsumerContract(slug)));
     const targetDir = TARGETS[slug];
     fs.mkdirSync(targetDir, { recursive: true });
     const ctx = { library: null, userDataDir: path.join(scratch, `ud-${slug}`), sendEvent() {} };
@@ -257,11 +321,12 @@ try {
 
     const validEntries = await readZip(v1Zip);
     await writeAdversarial(targetDir, slug, validEntries);
+    await writeLegacyProtocol1(targetDir, validEntries);
 
     const expected = {
       appType: built.contract.contract.appType,
       contractId: built.contract.contractId,
-      contractVersion: built.contract.version,
+      contractRevision: built.contract.version,
       libraryId: library.descriptor.libraryId,
       productionId: built.production.id,
       publicationV1: built.publication.id,
@@ -272,6 +337,18 @@ try {
       retiredCharacterIds: built.perCharacter.slice(1).map((entry) => entry.hero.id),
     };
     fs.writeFileSync(path.join(targetDir, 'expected.json'), `${JSON.stringify(expected, null, 2)}\n`);
+
+    /* The stamp that makes a stale fixture fail instead of quietly certifying
+       a vocabulary that has moved. `verify` compares it against the kit; three
+       suites once ran green for eleven days against names World Hub had
+       already deleted, because nothing recorded when they were built. */
+    const generated = {
+      generatedAt: new Date().toISOString(),
+      vocabularyVersion: vocabularyVersion(),
+      protocolVersion: PROTOCOL_VERSION,
+      note: 'Generated by World Hub. Do not hand-edit; regenerate with scripts/generate-consumer-fixtures.mjs.',
+    };
+    fs.writeFileSync(path.join(targetDir, 'generated.json'), `${JSON.stringify(generated, null, 2)}\n`);
 
     await closeLibrary(ctx);
     const size = fs.readdirSync(targetDir).reduce((sum, file) => sum + fs.statSync(path.join(targetDir, file)).size, 0);

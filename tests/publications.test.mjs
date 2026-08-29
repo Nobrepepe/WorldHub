@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import sharp from 'sharp';
 import yauzl from 'yauzl';
 import { makeTestLibrary, makeTempDir } from './helpers.mjs';
-import { installExampleContract } from '../electron/services/contract-service.js';
+import { installExampleContract, updateContract } from '../electron/services/contract-service.js';
 import {
   createProduction, setProductionValue, setSelection, setAssetSetItems,
 } from '../electron/services/production-service.js';
@@ -65,7 +65,7 @@ test('publishing creates a complete verified package with checksums over every f
   /* manifest content */
   const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'manifest.json'), 'utf8'));
   assert.equal(manifest.format, 'world-hub-package');
-  assert.equal(manifest.protocolVersion, 1);
+  assert.equal(manifest.protocolVersion, 2);
   assert.equal(manifest.complete, true);
   assert.ok(manifest.entities.some((entry) => entry.id === nao.id));
 
@@ -206,7 +206,7 @@ test('assets and entities referenced by contract-defined values ship in the pack
     contractVersion: 1,
     appType: 'test.value-refs',
     name: 'Value reference test',
-    supportedProtocolVersions: [1],
+    supportedProtocolVersions: [1, 2],
     productionFields: [
       { id: 'cover_art', label: 'Cover art', type: 'assetRef', assetKinds: ['image'], recipes: ['thumbnail_square'] },
       { id: 'sponsor', label: 'Sponsor', type: 'entityRef', entityTypes: ['character'] },
@@ -366,3 +366,36 @@ function readZip(zipPath) {
     });
   });
 }
+
+test('publishing is refused when the contract cannot read the protocol this library writes', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const contract = installExampleContract(library);
+  /* the application says it only understands the older package format */
+  const stuck = { ...contract.contract, supportedProtocolVersions: [1] };
+  const updated = updateContract(library, contract.contractId, stuck);
+
+  const world = createEntity(library, { type: 'world', name: 'Vel' });
+  const nao = createEntity(library, { type: 'character', name: 'Nao', worldId: world.id });
+  const png = await sharp({ create: { width: 60, height: 80, channels: 3, background: { r: 20, g: 40, b: 60 } } }).png().toBuffer();
+  const portrait = await importAsset(library, { buffer: png, filename: 'nao.png', title: 'Nao portrait' });
+  setAssetLinks(library, portrait.id, [{ entityId: nao.id, role: 'character.portrait' }]);
+
+  const production = createProduction(library, {
+    name: 'Stuck', contractId: updated.contractId, contractVersion: updated.version, worldId: world.id });
+  setProductionValue(library, production.id, { scope: 'production', field: 'gallery_title', value: 'Stuck' });
+  setSelection(library, production.id, 'world', [world.id]);
+  setSelection(library, production.id, 'cast', [nao.id]);
+  setAssetSetItems(library, production.id, { slot: 'portrait', entityId: nao.id, items: [{ assetId: portrait.id }] });
+
+  await assert.rejects(
+    () => publishProduction(library, production.id),
+    (error) => {
+      assert.equal(error.code, 'publish.protocol_unsupported');
+      assert.match(error.message, /protocol 1.*publishes protocol 2/s);
+      return true;
+    },
+    'a package the application could not read is refused before it is written',
+  );
+});

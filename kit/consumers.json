@@ -1,0 +1,9 @@
+{
+  "$comment": "Every application that consumes World Hub packages, and the runtime whose reader it vendors. kit-init appends to this; kit-sync and npm run check read it. A consumer absent from a machine is skipped, never an error.",
+  "consumers": [
+    { "slug": "taskstamps", "repo": "TaskStamps", "runtime": "py", "appType": "task-stamps.stamp-set" },
+    { "slug": "chatbot", "repo": "ChatBot", "runtime": "js", "appType": "chat-bot.cast" },
+    { "slug": "stickeralbum", "repo": "StickerAlbum", "runtime": "js", "appType": "sticker-album.collection" },
+    { "slug": "herocollector", "repo": "HeroCollector", "runtime": "js", "appType": "hero-collector.content-pack" }
+  ]
+}
