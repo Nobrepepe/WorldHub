@@ -104,7 +104,7 @@ test('stickeralbum package carries 10 slots, itemFields, packs with nested distr
   }
 });
 
-test('herocollector package carries nested campaign, relic, expedition, and crisis structures with their art', async (t) => {
+test('herocollector package carries creative facts only, with their art', async (t) => {
   const { library, root, cleanup } = await makeTestLibrary();
   t.after(cleanup);
   const built = await buildHeroCollectorProduction(library);
@@ -114,21 +114,37 @@ test('herocollector package carries nested campaign, relic, expedition, and cris
 
   const worldId = built.canon.world.id;
   const worldValues = content.entityValues[worldId];
+  // Campaign nodes are names. Thresholds, material families and grades, and
+  // hero placement are the game's, and no longer travel in a publication.
   assert.equal(worldValues.hc_campaign_nodes.length, 30);
-  assert.equal(worldValues.hc_campaign_nodes[10].node_grade, 'improved');
-  assert.equal(worldValues.hc_campaign_nodes[5].node_encounter_character, built.perCharacter[0].hero.id, 'world encounters name heroes');
+  assert.equal(worldValues.hc_campaign_nodes[10], 'Node 11');
+  assert.ok(worldValues.hc_campaign_nodes.every((name) => typeof name === 'string'));
+  assert.equal(content.values.hc_main_chapters[0].chapter_nodes[0], 'Main Node 1');
+
   assert.equal(worldValues.hc_relic_pieces.length, 4, 'the relic comes in four pieces');
   assert.equal(worldValues.hc_relic_name, 'The Star Cage');
-  assert.equal(worldValues.hc_mastery_skins[0].ms_character, built.perCharacter[0].hero.id);
+  // Cosmetics are ordered, not rank-assigned: the game decides the milestones.
+  assert.equal(worldValues.hc_mastery_cosmetics[0].mc_character, built.perCharacter[0].hero.id);
+  assert.equal(worldValues.hc_mastery_cosmetics[0].mc_name, 'Vigil Ash');
   assert.ok(index.some((entry) => entry.assetId === built.relicArt.id), 'relic piece art from a nested list is packaged');
-  assert.ok(index.some((entry) => entry.assetId === built.crisisArt.id && entry.recipeId === 'tile_16x9'), 'crisis art packaged with its recipe');
+  assert.ok(index.some((entry) => entry.assetId === built.worldCover.id && entry.recipeId === 'tile_16x9'),
+    'the world cover is packaged with its recipe; it also carries the world Crisis');
 
-  assert.equal(content.values.hc_crises[0].crisis_fronts.length, 3);
-  assert.equal(content.values.hc_crises[0].crisis_world, worldId);
-  assert.equal(content.values.hc_expedition_templates[0].exptpl_reward_package, 'reward_basic');
+  // Factions are canonical group entities, not ids typed into a production.
+  assert.deepEqual(content.selections.hc_factions, [built.emberguard.id]);
+  assert.equal(content.entityValues[built.emberguard.id].hc_faction_explanation,
+    'They kept the same vigil, and it shows.');
+
+  // No mechanical library reaches the package at all.
+  assert.equal(content.values.hc_crises, undefined);
+  assert.equal(content.values.hc_expedition_templates, undefined);
 
   const heroValues = content.entityValues[built.perCharacter[0].hero.id];
   assert.equal(heroValues.hc_archetype, 'leader');
+  assert.equal(heroValues.hc_faction, built.emberguard.id);
+  assert.deepEqual(heroValues.hc_traits, ['tag_scholar']);
+  assert.equal(heroValues.hc_tier, undefined, 'acquisition tiers are gone');
+  assert.equal(heroValues.hc_starting, undefined, 'the starting five are drawn per save');
   assert.equal(heroValues.hc_equipment[1].equip_slot, 'signature');
   assert.ok(index.some((entry) => entry.assetId === built.perCharacter[0].equipArt.id), 'equipment art packaged');
 });

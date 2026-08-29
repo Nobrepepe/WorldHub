@@ -63,14 +63,32 @@ export async function renderContracts() {
 
   host.append(
     el('div', { class: 'toolbar' },
+      /* The application's own repository keeps the authoritative contract, at
+         <App>/worldhub/application-contract.json. Importing it records where it
+         came from, so World Hub can tell later whether the two still agree —
+         which retyping it here never could. */
       !readOnly ? el('button', {
         class: 'btn btn-primary',
+        onclick: async () => {
+          const imported = await callSafe('contract.importFile', { sourcePath: null });
+          if (!imported) return;
+          const said = imported.imported === 'created' ? 'Imported'
+            : imported.imported === 'updated' ? `Imported as version ${imported.version}`
+            : 'Already up to date with that file';
+          showToast(`${said} — ${imported.name}.`, 'good');
+          navigate(`/contract/${imported.contractId}`);
+        },
+      }, 'Import from file →') : null,
+      !readOnly ? el('button', {
+        class: 'btn',
         onclick: async () => {
           const created = await callSafe('contract.create', { contract: { ...EMPTY_CONTRACT } });
           if (created) navigate(`/contract/${created.contractId}`);
         },
-      }, 'Create a contract →') : null,
+      }, 'Write one here…') : null,
     ),
+    el('p', { class: 'section-note', style: { marginTop: '0.4rem' } },
+      'Contracts belong to the application that needs them. Import the file from its repository rather than pasting it in, so a later change over there can be noticed here.'),
     listHost,
   );
   await render();
@@ -88,6 +106,53 @@ export async function renderContractDetail({ id }) {
     el('p', { class: 'meta-line' },
       `Version ${view.version} of ${view.versions.length} · ${view.status}${view.status === 'archived' ? ' — read-only' : ''}`),
   ));
+
+  /* Where this contract came from, and whether that file has moved since. */
+  const provenance = el('div', { class: 'section', style: { maxWidth: '46rem' } });
+  host.append(provenance);
+  const renderProvenance = async () => {
+    clear(provenance);
+    const drift = await callSafe('contract.drift', { contractId: id });
+    if (!drift) return;
+    provenance.append(el('span', { class: 'eyebrow' }, 'Source'));
+    if (!drift.tracked) {
+      provenance.append(
+        el('p', { class: 'section-note' },
+          'Written here rather than imported, so nothing links it to an application\u2019s repository. Import that file over this contract to bind them.'),
+        !readOnly ? el('div', { class: 'overlay-actions' }, el('button', {
+          class: 'btn',
+          onclick: async () => {
+            const imported = await callSafe('contract.importFile', { sourcePath: null });
+            if (imported) { showToast(`Bound to ${imported.sourcePath}.`, 'good'); navigate(`/contract/${imported.contractId}`); }
+          },
+        }, 'Bind to a file\u2026')) : null);
+      return;
+    }
+    provenance.append(el('p', { class: 'meta-line mono' }, drift.sourcePath));
+    if (drift.drifted) {
+      provenance.append(el('div', { class: 'issue error' },
+        el('span', { class: 'issue-sev' }, 'changed'), ' ',
+        el('span', { class: 'issue-text' }, drift.message)));
+    } else if (drift.unverifiable) {
+      provenance.append(el('p', { class: 'section-note' }, drift.message));
+    } else {
+      provenance.append(el('p', { class: 'state-good' }, 'This contract matches the file it was imported from.'));
+    }
+    if (!readOnly && !drift.unverifiable) {
+      provenance.append(el('div', { class: 'overlay-actions' }, el('button', {
+        class: drift.drifted ? 'btn btn-primary' : 'btn',
+        onclick: async () => {
+          const imported = await callSafe('contract.importFile', { sourcePath: drift.sourcePath });
+          if (!imported) return;
+          showToast(imported.imported === 'updated'
+            ? `Imported as version ${imported.version}. Move productions to it from their own screens.`
+            : 'Already up to date with that file.', 'good');
+          navigate(`/contract/${id}`);
+        },
+      }, drift.drifted ? 'Re-import the file \u2192' : 'Re-import')));
+    }
+  };
+  await renderProvenance();
 
   /** Working copy edited by the guided editor; saved as a new version. */
   let draft = structuredClone(view.contract);
@@ -128,6 +193,8 @@ export async function renderContractDetail({ id }) {
       fieldListEditor('Production fields', draft.productionFields ??= [], readOnly),
       selectionListEditor(draft, readOnly),
       el('hr', { class: 'rule' }),
+      view.sourcePath ? el('p', { class: 'section-note' },
+        `Changes saved here will disagree with ${view.sourcePath}, and productions on this contract cannot be published until they match. Prefer editing that file and importing it.`) : null,
       !readOnly ? el('button', { class: 'btn btn-primary', onclick: saveDraft }, 'Save as a new version →') : null,
     ]);
     return container;
@@ -135,6 +202,15 @@ export async function renderContractDetail({ id }) {
 
   const rawTab = () => {
     const container = el('div', {});
+    /* Editing here is still the right thing for a contract that has no file —
+       and the wrong thing for one that does, because the application's own copy
+       is authoritative and this would leave the two disagreeing. Say so rather
+       than disabling it: sometimes a quick fix here is exactly what is wanted,
+       and drift will report it either way. */
+    if (view.sourcePath) {
+      container.append(el('p', { class: 'section-note' },
+        `This contract came from ${view.sourcePath}. Editing it here makes World Hub disagree with that file, and productions on it cannot be published until the two match again. Change the file and import it instead.`));
+    }
     const area = el('textarea', { class: 'json-editor', 'aria-label': 'Contract JSON', readOnly, spellcheck: 'false' });
     area.value = JSON.stringify(draft, null, 2);
     const issuesHost = el('div', { style: { marginTop: '0.8rem' } });
