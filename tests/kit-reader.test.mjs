@@ -109,9 +109,9 @@ test('recipes and roles are resolved from the embedded contract, not from names 
   const pkg = loadPackage(path.join(root, ...built.publication.directory.split('/')),
     APP_TYPE.herocollector, options());
 
-  const portraitSet = pkg.setForRole('character.portrait');
-  assert.equal(portraitSet, 'hc_portrait');
-  assert.deepEqual(pkg.recipesFor(portraitSet), ['square', 'thumbnail_square']);
+  const tileSet = pkg.setForRole('character.tile');
+  assert.equal(tileSet, 'hc_portrait');
+  assert.deepEqual(pkg.recipesFor(tileSet), ['tile_16x9']);
   assert.equal(pkg.setForRole('character.full_body'), 'hc_full_body');
   assert.equal(pkg.setForRole('nonexistent.role'), null);
 });

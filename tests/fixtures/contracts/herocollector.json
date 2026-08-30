@@ -2,9 +2,12 @@
   "format": "world-hub-application-contract",
   "contractFormatVersion": 1,
   "appType": "hero-collector.content-pack",
-  "name": "Hero Collector — Creative Manifest",
-  "description": "The worlds and people of a Hero Collector game: who exists, in what order, what they are called, and what they look like. Nothing here decides anything mechanical. Power thresholds, material families and grades, node rewards, relic and hero-reveal positions, recruitment cost, Expedition routes, Crisis Fronts and Mastery milestones are all computed by the game from its own balance files — so renaming a node can never move its Power, and adding a world needs nothing here but the world.",
-  "supportedProtocolVersions": [1, 2],
+  "name": "Hero Collector \u2014 Creative Manifest",
+  "description": "The worlds and people of a Hero Collector game: who exists, in what order, what they are called, and what they look like. Nothing here decides anything mechanical. Power thresholds, material families and grades, node rewards, relic and hero-reveal positions, recruitment cost, Expedition routes, Crisis Fronts and Mastery milestones are all computed by the game from its own balance files \u2014 so renaming a node can never move its Power, and adding a world needs nothing here but the world.",
+  "supportedProtocolVersions": [
+    1,
+    2
+  ],
   "productionFields": [
     {
       "id": "hc_main_chapters",
@@ -14,7 +17,7 @@
       "required": true,
       "minItems": 1,
       "maxItems": 20,
-      "hint": "The opening track, shared by every world. The game introduces each world's first five heroes along it, so it needs one chapter per two published worlds — with four worlds, publish at least two chapters.",
+      "hint": "The opening track, shared by every world. The game introduces each world's first five heroes along it, so it needs one chapter per two published worlds \u2014 with four worlds, publish at least two chapters.",
       "fields": [
         {
           "id": "chapter_title",
@@ -24,8 +27,24 @@
           "maxLength": 120
         },
         {
+          "id": "chapter_art",
+          "label": "Chapter backdrop",
+          "type": "assetRef",
+          "required": false,
+          "assetKinds": [
+            "image"
+          ],
+          "assetRoles": [
+            "world.background"
+          ],
+          "recipes": [
+            "tile_16x9"
+          ],
+          "hint": "A 16:9 backdrop for this chapter. Left blank, the chapter borrows the backdrop of the world it introduces."
+        },
+        {
           "id": "chapter_nodes",
-          "label": "Node names — ten, in order",
+          "label": "Node names \u2014 ten, in order",
           "type": "list",
           "required": true,
           "minItems": 10,
@@ -44,10 +63,12 @@
     {
       "id": "hc_worlds",
       "label": "Worlds",
-      "entityTypes": ["world"],
+      "entityTypes": [
+        "world"
+      ],
       "min": 1,
       "ordered": true,
-      "hint": "Playable worlds, in the order they should be met — that order is the game's progression order. Name, tagline and description come from the canonical world profile.",
+      "hint": "Playable worlds, in the order they should be met \u2014 that order is the game's progression order. Name, tagline and description come from the canonical world profile.",
       "fields": [
         {
           "id": "hc_world_icon",
@@ -60,21 +81,21 @@
         },
         {
           "id": "hc_palette_primary",
-          "label": "Palette — primary",
+          "label": "Palette \u2014 primary",
           "section": "Look",
           "type": "color",
           "required": false
         },
         {
           "id": "hc_palette_accent",
-          "label": "Palette — accent",
+          "label": "Palette \u2014 accent",
           "section": "Look",
           "type": "color",
           "required": false
         },
         {
           "id": "hc_palette_dark",
-          "label": "Palette — dark",
+          "label": "Palette \u2014 dark",
           "section": "Look",
           "type": "color",
           "required": false
@@ -96,7 +117,7 @@
         },
         {
           "id": "hc_campaign_nodes",
-          "label": "Campaign node names — thirty, in order",
+          "label": "Campaign node names \u2014 thirty, in order",
           "section": "Campaign",
           "type": "list",
           "required": true,
@@ -112,7 +133,7 @@
         },
         {
           "id": "hc_relic_name",
-          "label": "Relic — name",
+          "label": "Relic \u2014 name",
           "section": "Relic",
           "type": "shortText",
           "required": true,
@@ -121,7 +142,7 @@
         },
         {
           "id": "hc_relic_lore",
-          "label": "Relic — lore",
+          "label": "Relic \u2014 lore",
           "section": "Relic",
           "type": "multilineText",
           "required": false,
@@ -129,7 +150,7 @@
         },
         {
           "id": "hc_relic_pieces",
-          "label": "Relic pieces — four, in order",
+          "label": "Relic pieces \u2014 four, in order",
           "section": "Relic",
           "type": "list",
           "required": true,
@@ -156,25 +177,31 @@
               "label": "Piece art",
               "type": "assetRef",
               "required": false,
-              "assetKinds": ["image"],
-              "recipes": ["square"]
+              "assetKinds": [
+                "image"
+              ],
+              "recipes": [
+                "square"
+              ]
             }
           ]
         },
         {
           "id": "hc_mastery_cosmetics",
-          "label": "Mastery cosmetics — in the order they should be earned",
+          "label": "Mastery cosmetics \u2014 in the order they should be earned",
           "section": "Mastery",
           "type": "list",
           "required": false,
           "maxItems": 4,
-          "hint": "Alternate looks for this world's heroes. The first is awarded at the first Mastery milestone that grants one, the second at the next, and so on — which milestones those are is the game's to decide.",
+          "hint": "Alternate looks for this world's heroes. The first is awarded at the first Mastery milestone that grants one, the second at the next, and so on \u2014 which milestones those are is the game's to decide.",
           "fields": [
             {
               "id": "mc_character",
               "label": "Character",
               "type": "entityRef",
-              "entityTypes": ["character"],
+              "entityTypes": [
+                "character"
+              ],
               "required": true,
               "hint": "Must be a hero of this world."
             },
@@ -190,8 +217,13 @@
               "label": "Cosmetic art",
               "type": "assetRef",
               "required": false,
-              "assetKinds": ["image"],
-              "recipes": ["square", "thumbnail_square"]
+              "assetKinds": [
+                "image"
+              ],
+              "recipes": [
+                "square",
+                "thumbnail_square"
+              ]
             }
           ]
         }
@@ -200,18 +232,30 @@
         {
           "id": "hc_world_cover",
           "label": "World cover",
-          "kinds": ["image"],
-          "roles": ["world.cover"],
-          "recipes": ["tile_16x9"],
+          "kinds": [
+            "image"
+          ],
+          "roles": [
+            "world.cover"
+          ],
+          "recipes": [
+            "tile_16x9"
+          ],
           "exact": 1,
           "hint": "Also carries this world's Crisis."
         },
         {
           "id": "hc_chapter_art",
-          "label": "Chapter art — three, in order",
-          "kinds": ["image"],
-          "roles": ["scene.key_art"],
-          "recipes": ["tile_16x9"],
+          "label": "Chapter art \u2014 three, in order",
+          "kinds": [
+            "image"
+          ],
+          "roles": [
+            "world.background"
+          ],
+          "recipes": [
+            "tile_16x9"
+          ],
           "min": 0,
           "max": 3,
           "hint": "One image per campaign chapter, in chapter order."
@@ -221,7 +265,9 @@
     {
       "id": "hc_characters",
       "label": "Characters",
-      "entityTypes": ["character"],
+      "entityTypes": [
+        "character"
+      ],
       "min": 1,
       "ordered": true,
       "hint": "The cast, in the order they should be met. Within each world, the first five are the ones the Main Campaign introduces; the rest are revealed along their own world's campaign. Every hero costs the same to recruit and joins at the same Star, so this order is narrative, not mechanical.",
@@ -232,59 +278,41 @@
           "type": "enum",
           "required": true,
           "options": [
-            { "value": "leader", "label": "Leader" },
-            { "value": "caretaker", "label": "Caretaker" },
-            { "value": "achiever", "label": "Achiever" },
-            { "value": "rebel", "label": "Rebel" },
-            { "value": "dreamer", "label": "Dreamer" },
-            { "value": "freespirit", "label": "Free Spirit" }
+            {
+              "value": "leader",
+              "label": "Leader"
+            },
+            {
+              "value": "caretaker",
+              "label": "Caretaker"
+            },
+            {
+              "value": "achiever",
+              "label": "Achiever"
+            },
+            {
+              "value": "rebel",
+              "label": "Rebel"
+            },
+            {
+              "value": "dreamer",
+              "label": "Dreamer"
+            },
+            {
+              "value": "freespirit",
+              "label": "Free Spirit"
+            }
           ]
         },
         {
           "id": "hc_faction",
           "label": "Faction",
           "type": "entityRef",
-          "entityTypes": ["group"],
+          "entityTypes": [
+            "group"
+          ],
           "required": false,
           "hint": "A group this character belongs to. Select the same group under Factions for it to grant party synergy; how much it is worth is the game's to tune."
-        },
-        {
-          "id": "hc_traits",
-          "label": "Traits",
-          "type": "list",
-          "required": false,
-          "maxItems": 4,
-          "hint": "Callings a party can share. Purely fictional facts — the game decides what sharing one is worth.",
-          "item": {
-            "id": "hc_trait",
-            "label": "Trait",
-            "type": "enum",
-            "options": [
-              { "value": "tag_scholar", "label": "Scholar" },
-              { "value": "tag_artisan", "label": "Artisan" },
-              { "value": "tag_musician", "label": "Musician" },
-              { "value": "tag_pilot", "label": "Pilot" },
-              { "value": "tag_herbalist", "label": "Herbalist" },
-              { "value": "tag_hunter", "label": "Hunter" },
-              { "value": "tag_medic", "label": "Medic" }
-            ]
-          }
-        },
-        {
-          "id": "hc_glyph",
-          "label": "Glyph",
-          "section": "Look",
-          "type": "shortText",
-          "required": false,
-          "maxLength": 4,
-          "hint": "One letter or symbol, shown where there is no portrait."
-        },
-        {
-          "id": "hc_color",
-          "label": "Colour",
-          "section": "Look",
-          "type": "color",
-          "required": false
         },
         {
           "id": "hc_equipment",
@@ -301,12 +329,30 @@
               "type": "enum",
               "required": true,
               "options": [
-                { "value": "attire", "label": "Attire" },
-                { "value": "tool", "label": "Tool" },
-                { "value": "accessory", "label": "Accessory" },
-                { "value": "keepsake", "label": "Keepsake" },
-                { "value": "emblem", "label": "Emblem" },
-                { "value": "signature", "label": "Signature" }
+                {
+                  "value": "attire",
+                  "label": "Attire"
+                },
+                {
+                  "value": "tool",
+                  "label": "Tool"
+                },
+                {
+                  "value": "accessory",
+                  "label": "Accessory"
+                },
+                {
+                  "value": "keepsake",
+                  "label": "Keepsake"
+                },
+                {
+                  "value": "emblem",
+                  "label": "Emblem"
+                },
+                {
+                  "value": "signature",
+                  "label": "Signature"
+                }
               ]
             },
             {
@@ -321,8 +367,16 @@
               "label": "Art",
               "type": "assetRef",
               "required": false,
-              "assetKinds": ["image"],
-              "recipes": ["square"]
+              "assetKinds": [
+                "image"
+              ],
+              "recipes": [
+                "square",
+                "thumbnail_square"
+              ],
+              "assetRoles": [
+                "character.collectible"
+              ]
             }
           ]
         }
@@ -330,18 +384,31 @@
       "assetSets": [
         {
           "id": "hc_portrait",
-          "label": "Portrait",
-          "kinds": ["image"],
-          "roles": ["character.portrait"],
-          "recipes": ["square", "thumbnail_square"],
-          "exact": 1
+          "label": "Character tile",
+          "kinds": [
+            "image"
+          ],
+          "roles": [
+            "character.tile"
+          ],
+          "recipes": [
+            "tile_16x9"
+          ],
+          "exact": 1,
+          "hint": "A 16:9 tile. Shown wherever the character is listed or chosen."
         },
         {
           "id": "hc_full_body",
           "label": "Full body",
-          "kinds": ["image"],
-          "roles": ["character.full_body"],
-          "recipes": ["full_body_9x16"],
+          "kinds": [
+            "image"
+          ],
+          "roles": [
+            "character.full_body"
+          ],
+          "recipes": [
+            "full_body_9x16"
+          ],
           "min": 0,
           "max": 1
         }
@@ -350,9 +417,11 @@
     {
       "id": "hc_factions",
       "label": "Factions",
-      "entityTypes": ["group"],
+      "entityTypes": [
+        "group"
+      ],
       "min": 0,
-      "hint": "Groups whose members work well together. Name and description come from the canonical group profile; a character joins one by selecting it as their Faction. Selecting no groups is fine — the game simply has no faction synergy.",
+      "hint": "Groups whose members work well together. Name and description come from the canonical group profile; a character joins one by selecting it as their Faction. Selecting no groups is fine \u2014 the game simply has no faction synergy.",
       "fields": [
         {
           "id": "hc_faction_explanation",
@@ -369,13 +438,27 @@
     {
       "id": "hc_expedition_art",
       "label": "Expedition board art",
-      "kinds": ["image"],
-      "roles": ["scene.key_art"],
-      "recipes": ["tile_16x9"],
+      "kinds": [
+        "image"
+      ],
+      "roles": [
+        "world.background"
+      ],
+      "recipes": [
+        "tile_16x9"
+      ],
       "min": 0,
-      "max": 1
+      "max": 1,
+      "hint": "Backs every across-world route on the Expedition board, and its party screen. World-scoped routes use their own world background."
     }
   ],
-  "documents": { "mode": "linked" },
-  "requiredRecipes": ["tile_16x9", "square", "thumbnail_square", "full_body_9x16"]
+  "documents": {
+    "mode": "linked"
+  },
+  "requiredRecipes": [
+    "tile_16x9",
+    "square",
+    "thumbnail_square",
+    "full_body_9x16"
+  ]
 }

@@ -142,9 +142,11 @@ test('herocollector package carries creative facts only, with their art', async 
   const heroValues = content.entityValues[built.perCharacter[0].hero.id];
   assert.equal(heroValues.hc_archetype, 'leader');
   assert.equal(heroValues.hc_faction, built.emberguard.id);
-  assert.deepEqual(heroValues.hc_traits, ['tag_scholar']);
   assert.equal(heroValues.hc_tier, undefined, 'acquisition tiers are gone');
   assert.equal(heroValues.hc_starting, undefined, 'the starting five are drawn per save');
+  assert.equal(heroValues.hc_traits, undefined, 'traits went with the factions that replaced them');
+  assert.equal(heroValues.hc_glyph, undefined, 'a name already contains its own initial');
+  assert.equal(heroValues.hc_color, undefined, 'characters are shown by their art, not an accent');
   assert.equal(heroValues.hc_equipment[1].equip_slot, 'signature');
   assert.ok(index.some((entry) => entry.assetId === built.perCharacter[0].equipArt.id), 'equipment art packaged');
 });

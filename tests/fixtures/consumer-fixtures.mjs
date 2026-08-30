@@ -334,10 +334,12 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
   /* Main Campaign — chapter titles and node names, and nothing else. The
      game sets every threshold, drop, reward and hero reveal along it. */
   const cast = heroes.slice(0, variant === 1 ? 5 : 6);
+  const journeyArt = await importImage(library, 'Main Campaign chapter backdrop', { role: 'world.background', seed: 3900 });
   setProductionValue(library, production.id, {
     scope: 'production', field: 'hc_main_chapters',
     value: [{
       chapter_title: 'Emberfall · The First Light',
+      chapter_art: journeyArt.id,
       chapter_nodes: Array.from({ length: 10 }, (_, i) => `Main Node ${i + 1}`),
     }],
   });
@@ -382,7 +384,7 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
   setAssetSetItems(library, production.id, { slot: 'hc_world_cover', entityId: world.id, items: items([worldCover]) });
   const chapterArts = [];
   for (let c = 1; c <= 3; c++) {
-    chapterArts.push(await importImage(library, `Chapter ${c} art`, { entityId: world.id, role: 'scene.key_art', seed: 3320 + c }));
+    chapterArts.push(await importImage(library, `Chapter ${c} backdrop`, { entityId: world.id, role: 'world.background', seed: 3320 + c }));
   }
   setAssetSetItems(library, production.id, { slot: 'hc_chapter_art', entityId: world.id, items: items(chapterArts) });
 
@@ -395,9 +397,6 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
     const values = {
       hc_archetype: archetypes[index % archetypes.length],
       hc_faction: emberguard.id,
-      hc_traits: ['tag_scholar'],
-      hc_glyph: hero.name[0],
-      hc_color: '#7a8aa0',
       hc_equipment: [
         { equip_slot: 'attire', equip_name: `${hero.name}'s Ember Cloak`, equip_art: null },
         { equip_slot: 'signature', equip_name: `${hero.name}'s Star Brand`, equip_art: equipArt.id },
@@ -406,7 +405,7 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
     for (const [field, value] of Object.entries(values)) {
       setProductionValue(library, production.id, { scope: 'entity', entityId: hero.id, field, value });
     }
-    const portrait = await importImage(library, `${hero.name} hc portrait`, { entityId: hero.id, role: 'character.portrait', seed: 3600 + index * 10 + variant });
+    const portrait = await importImage(library, `${hero.name} hc tile`, { entityId: hero.id, role: 'character.tile', seed: 3600 + index * 10 + variant });
     setAssetSetItems(library, production.id, { slot: 'hc_portrait', entityId: hero.id, items: items([portrait]) });
     const fullBody = await importImage(library, `${hero.name} full body`, { entityId: hero.id, role: 'character.full_body', seed: 3700 + index * 10 });
     setAssetSetItems(library, production.id, { slot: 'hc_full_body', entityId: hero.id, items: items([fullBody]) });
@@ -418,7 +417,7 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
 
   setProductionStatus(library, production.id, 'ready');
   const publication = await publishProduction(library, production.id);
-  return { contract, canon, production, publication, perCharacter, emberguard, relicArt, cosmeticArt, worldCover };
+  return { contract, canon, production, publication, perCharacter, emberguard, relicArt, cosmeticArt, worldCover, journeyArt };
 }
 
 export const CONSUMER_BUILDERS = {
