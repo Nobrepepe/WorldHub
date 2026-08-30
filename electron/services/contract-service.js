@@ -142,10 +142,19 @@ export function updateContract(library, contractId, rawContract) {
   const db = library.db;
   const latest = db.prepare('SELECT MAX(version) v FROM application_contracts WHERE contract_id = ?').get(contractId)?.v;
   if (!latest) throw domainError('contract.missing', 'That contract no longer exists.');
+  /* A new version inherits where the contract came from. Dropping it would
+     quietly untrack the contract, and an edit made here would then look like
+     a contract nobody had ever bound to a file — which is precisely the state
+     the whole import path exists to prevent. */
+  const source = db.prepare(`
+    SELECT source_path, source_sha256 FROM application_contracts
+    WHERE contract_id = ? ORDER BY version DESC LIMIT 1
+  `).get(contractId) ?? {};
   db.prepare(`
-    INSERT INTO application_contracts (contract_id, version, app_type, name, json, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(contractId, latest + 1, contractJson.appType, contractJson.name, JSON.stringify(contractJson, null, 2), nowIso());
+    INSERT INTO application_contracts (contract_id, version, app_type, name, json, created_at, source_path, source_sha256)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(contractId, latest + 1, contractJson.appType, contractJson.name,
+    JSON.stringify(contractJson, null, 2), nowIso(), source.source_path ?? null, source.source_sha256 ?? null);
   recordActivity(db, 'contract.new_version', 'contract', contractId, `v${latest + 1}`);
   return getContract(library, contractId);
 }
@@ -317,11 +326,29 @@ export function contractDrift(library, contractId) {
       message: `The contract file this was imported from is not on this machine (${row.source_path}), so it cannot be checked here. Publishing uses the version already imported.`,
     };
   }
-  if (sha256(raw) === row.source_sha256) return clean;
+  /* Compare the documents, not the bytes. A checksum only answers "has the
+     file moved?", which misses the other way the two can disagree: a contract
+     edited here drifts from a file that never changed at all. */
+  let fromFile;
+  try {
+    fromFile = normalizeContractJson(JSON.parse(raw.toString('utf8')));
+  } catch {
+    return {
+      ...clean,
+      drifted: true,
+      reason: 'unreadable',
+      message: `${row.source_path} is no longer valid JSON, so this contract cannot be checked against it.`,
+    };
+  }
+  if (stableJson(JSON.parse(row.json)) === stableJson(fromFile)) return clean;
+
+  const fileMoved = sha256(raw) !== row.source_sha256;
   return {
     ...clean,
     drifted: true,
-    reason: 'changed',
-    message: `${row.source_path} has changed since version ${row.version} was imported. Re-import it so productions publish against what the application actually asks for.`,
+    reason: fileMoved ? 'file_changed' : 'edited_here',
+    message: fileMoved
+      ? `${row.source_path} has changed since version ${row.version} was imported. Re-import it so productions publish against what the application actually asks for.`
+      : `Version ${row.version} was edited in World Hub and no longer matches ${row.source_path}. The application's own copy is the authoritative one — make the change there and import it.`,
   };
 }

@@ -312,8 +312,8 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
   const contract = createContract(library, loadConsumerContract('herocollector'));
   const canon = await buildCanon(library, { variant });
   const { world } = canon;
-  // The game holds a world back below five acquirable characters, and
-  // needs five starting minors; give the pack six.
+  // A world is held back below five heroes, and the Main Campaign has to be
+  // long enough to introduce five per world, so give the pack six.
   const heroes = [...canon.heroes];
   for (const name of ['Eryn', 'Fenn', 'Garrow', 'Hale'].slice(0, 6 - heroes.length)) {
     const extra = createEntity(library, { type: 'character', name, worldId: world.id });
@@ -321,101 +321,48 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
     heroes.push(extra);
   }
 
+  // Factions are canonical groups now, not ids typed into a production.
+  const emberguard = createEntity(library, { type: 'group', name: 'Emberguard', worldId: world.id });
+  updateEntity(library, emberguard.id, { status: 'canonical', summary: 'Sworn to the captive star.' });
+
   const production = createProduction(library, {
     name: variant === 1 ? 'Emberfall Pack' : 'Emberfall Pack v2',
     contractId: contract.contractId,
     worldId: world.id,
   });
 
-  /* campaigns */
-  const families = ['metal', 'fiber', 'mineral', 'compound', 'mechanism', 'essence'];
-  const grades = ['improved', 'improved', 'advanced'];
+  /* Main Campaign — chapter titles and node names, and nothing else. The
+     game sets every threshold, drop, reward and hero reveal along it. */
   const cast = heroes.slice(0, variant === 1 ? 5 : 6);
-  // Every cast member gets an encounter on the Main chapter, so the game's
-  // "reachable through a live encounter" inclusion rule sees all of them.
+  const journeyArt = await importImage(library, 'Main Campaign chapter backdrop', { role: 'world.background', seed: 3900 });
   setProductionValue(library, production.id, {
     scope: 'production', field: 'hc_main_chapters',
     value: [{
       chapter_title: 'Emberfall · The First Light',
-      chapter_nodes: Array.from({ length: 10 }, (_, i) => ({
-        mnode_name: `Main Node ${i + 1}`,
-        mnode_threshold: 50 + i * 40,
-        mnode_family: families[i % 6],
-        mnode_grade: 'basic',
-        mnode_encounter_character: cast[i % cast.length].id,
-      })),
+      chapter_art: journeyArt.id,
+      chapter_nodes: Array.from({ length: 10 }, (_, i) => `Main Node ${i + 1}`),
     }],
   });
 
-  /* production-level libraries */
+  /* factions */
+  setSelection(library, production.id, 'hc_factions', [emberguard.id]);
   setProductionValue(library, production.id, {
-    scope: 'production', field: 'hc_factions',
-    value: [{ faction_id: 'faction_emberguard', faction_name: 'Emberguard', faction_explanation: 'Sworn to the captive star.' }],
-  });
-  setProductionValue(library, production.id, {
-    scope: 'production', field: 'hc_expedition_requirements',
-    value: [{ expreq_id: 'req_scholars', expreq_type: 'tag_count', expreq_world: world.id, expreq_count: 1, expreq_text: 'Bring a scholar.' }],
-  });
-  setProductionValue(library, production.id, {
-    scope: 'production', field: 'hc_expedition_objectives',
-    value: [{ expobj_id: 'obj_swift', expobj_type: 'duration', expobj_count: 1, expobj_text: 'Return within a day.' }],
-  });
-  setProductionValue(library, production.id, {
-    scope: 'production', field: 'hc_expedition_rewards',
-    value: [{
-      expreward_id: 'reward_basic', expreward_name: 'Ember Cache',
-      expreward_entries: [
-        { rentry_kind: 'material', rentry_id: 'mat_metal_basic', rentry_amount: 4 },
-        { rentry_kind: 'resource', rentry_id: 'intelligence', rentry_amount: 1 },
-      ],
-    }],
-  });
-  setProductionValue(library, production.id, {
-    scope: 'production', field: 'hc_expedition_templates',
-    value: [{
-      exptpl_id: 'tpl_ember_run', exptpl_world: world.id, exptpl_party_size: 2,
-      exptpl_requirement_ids: ['req_scholars'],
-      exptpl_optional_ids: ['obj_swift'], exptpl_reward_package: 'reward_basic', exptpl_power_ratio_bp: 10000,
-      exptpl_titles: ['Ember Run'], exptpl_descriptions: ['A short supply run along the star canals.'],
-    }],
-  });
-  const crisisArt = await importImage(library, 'Crisis art', { seed: 3000 + variant });
-  setProductionValue(library, production.id, {
-    scope: 'production', field: 'hc_crises',
-    value: [{
-      crisis_id: 'crisis_starfall', crisis_world: world.id, crisis_name: 'Starfall Warning',
-      crisis_opening: 'The cage hums off-key.', crisis_art: crisisArt.id,
-      crisis_fronts: [
-        { front_id: 'front_gate', front_name: 'The Gate', front_description: 'Hold the gate.', front_favored_tags: ['tag_scholar'], front_power_local: 100, front_power_major: 300, front_power_world: 900, front_struggle_text: 'The gate held, barely.', front_success_text: 'The gate held.', front_excel_text: 'The gate never wavered.' },
-        { front_id: 'front_canal', front_name: 'The Canals', front_description: 'Calm the canals.', front_favored_tags: ['tag_artisan'], front_power_local: 120, front_power_major: 320, front_power_world: 950, front_struggle_text: 'The canals steamed.', front_success_text: 'The canals calmed.', front_excel_text: 'The canals sang.' },
-        { front_id: 'front_quarter', front_name: 'The Cold Quarter', front_description: 'Warm the quarter.', front_favored_tags: ['tag_medic'], front_power_local: 110, front_power_major: 310, front_power_world: 930, front_struggle_text: 'The quarter shivered.', front_success_text: 'The quarter warmed.', front_excel_text: 'The quarter glowed.' },
-      ],
-      crisis_consolation: [{ cons_kind: 'resource', cons_id: 'intelligence', cons_amount: 1 }],
-      crisis_cache_choices: [
-        { cache_id: 'cache_supply', cache_name: 'Supply Cache',
-          cache_entries: [{ centry_kind: 'energy', centry_id: '', centry_amount: 1 }] },
-        { cache_id: 'cache_materials', cache_name: 'Material Cache',
-          cache_entries: [{ centry_kind: 'material', centry_id: 'mat_metal_basic', centry_amount: 8 }] },
-        { cache_id: 'cache_intel', cache_name: 'Intelligence Cache',
-          cache_entries: [{ centry_kind: 'resource', centry_id: 'intelligence', centry_amount: 2 }] },
-      ],
-      crisis_boon_type: 'free_world_node_runs',
-      crisis_boon_runs: 3,
-      crisis_boon_prose: 'The star remembers your help.',
-    }],
+    scope: 'entity', entityId: emberguard.id,
+    field: 'hc_faction_explanation', value: 'They kept the same vigil, and it shows.',
   });
 
   /* world selection */
   setSelection(library, production.id, 'hc_worlds', [world.id]);
   const relicArt = await importImage(library, 'Relic ember shard', { seed: 3200 });
+  const cosmeticArt = await importImage(library, 'Vigil Ash cosmetic', { seed: 3500 });
   const worldValues = {
     hc_world_icon: '🔥',
     hc_palette_primary: '#5a7a9e',
     hc_palette_accent: '#9ec3e8',
     hc_palette_dark: '#1c2733',
-    hc_world_display_order: 0,
     hc_chapter_titles: ['Emberfall · Chapter 1', 'Emberfall · Chapter 2', 'Emberfall · Chapter 3'],
-    // The single major relic, in four pieces found at nodes 4 / 9 / 15 / 21.
+    hc_campaign_nodes: Array.from({ length: 30 }, (_, i) => `Node ${i + 1}`),
+    // One major relic in four pieces; the game chooses which nodes hide them.
     hc_relic_name: 'The Star Cage',
     hc_relic_lore: 'The lattice that once held the captive star together.',
     hc_relic_pieces: [
@@ -424,18 +371,12 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
       { piece_name: 'South Lattice', piece_lore: '', piece_art: null },
       { piece_name: 'West Lattice', piece_lore: '', piece_art: null },
     ],
-    hc_mastery_skins: [
-      { ms_rank: 'known', ms_character: heroes[0].id, ms_skin_id: 'skin_vigil_ash' },
-      { ms_rank: 'mastered', ms_character: heroes[0].id, ms_skin_id: 'skin_starlit_ash' },
+    // Ordered: the game decides which Mastery milestone each one lands on.
+    hc_mastery_cosmetics: [
+      { mc_character: heroes[0].id, mc_name: 'Vigil Ash', mc_art: cosmeticArt.id },
+      { mc_character: heroes[0].id, mc_name: 'Starlit Ash', mc_art: null },
     ],
   };
-  worldValues.hc_campaign_nodes = Array.from({ length: 30 }, (_, i) => ({
-    node_name: `Node ${i + 1}`,
-    node_threshold: 100 + i * 50,
-    node_family: families[i % 6],
-    node_grade: grades[Math.floor(i / 10)],
-    node_encounter_character: i % 6 === 5 ? cast[(i / 6 | 0) % cast.length].id : null,
-  }));
   for (const [field, value] of Object.entries(worldValues)) {
     setProductionValue(library, production.id, { scope: 'entity', entityId: world.id, field, value });
   }
@@ -443,44 +384,32 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
   setAssetSetItems(library, production.id, { slot: 'hc_world_cover', entityId: world.id, items: items([worldCover]) });
   const chapterArts = [];
   for (let c = 1; c <= 3; c++) {
-    chapterArts.push(await importImage(library, `Chapter ${c} art`, { entityId: world.id, role: 'scene.key_art', seed: 3320 + c }));
+    chapterArts.push(await importImage(library, `Chapter ${c} backdrop`, { entityId: world.id, role: 'world.background', seed: 3320 + c }));
   }
   setAssetSetItems(library, production.id, { slot: 'hc_chapter_art', entityId: world.id, items: items(chapterArts) });
 
-  /* characters */
+  /* characters — selection order is roster order */
   setSelection(library, production.id, 'hc_characters', cast.map((hero) => hero.id));
-  const archetypes = ['leader', 'dreamer', 'rebel', 'caretaker'];
+  const archetypes = ['leader', 'dreamer', 'rebel', 'caretaker', 'achiever', 'freespirit'];
   const perCharacter = [];
   for (const [index, hero] of cast.entries()) {
     const equipArt = await importImage(library, `${hero.name} signature art`, { seed: 3400 + index });
-    const skinArt = await importImage(library, `${hero.name} skin art`, { seed: 3500 + index });
     const values = {
       hc_archetype: archetypes[index % archetypes.length],
-      hc_tier: 'minor',
-      hc_starting: true,
-      hc_faction: 'faction_emberguard',
-      hc_extra_tags: ['tag_scholar'],
-      hc_glyph: hero.name[0],
-      hc_color: '#7a8aa0',
+      hc_faction: emberguard.id,
       hc_equipment: [
         { equip_slot: 'attire', equip_name: `${hero.name}'s Ember Cloak`, equip_art: null },
         { equip_slot: 'signature', equip_name: `${hero.name}'s Star Brand`, equip_art: equipArt.id },
       ],
-      hc_skins: index === 0
-        ? [
-          { skin_id: 'skin_vigil_ash', skin_name: 'Vigil Ash', skin_art: skinArt.id },
-          { skin_id: 'skin_starlit_ash', skin_name: 'Starlit Ash', skin_art: null },
-        ]
-        : [{ skin_id: `skin_hero_${index}`, skin_name: 'Festival Wear', skin_art: skinArt.id }],
     };
     for (const [field, value] of Object.entries(values)) {
       setProductionValue(library, production.id, { scope: 'entity', entityId: hero.id, field, value });
     }
-    const portrait = await importImage(library, `${hero.name} hc portrait`, { entityId: hero.id, role: 'character.portrait', seed: 3600 + index * 10 + variant });
+    const portrait = await importImage(library, `${hero.name} hc tile`, { entityId: hero.id, role: 'character.tile', seed: 3600 + index * 10 + variant });
     setAssetSetItems(library, production.id, { slot: 'hc_portrait', entityId: hero.id, items: items([portrait]) });
     const fullBody = await importImage(library, `${hero.name} full body`, { entityId: hero.id, role: 'character.full_body', seed: 3700 + index * 10 });
     setAssetSetItems(library, production.id, { slot: 'hc_full_body', entityId: hero.id, items: items([fullBody]) });
-    perCharacter.push({ hero, portrait, fullBody, equipArt, skinArt });
+    perCharacter.push({ hero, portrait, fullBody, equipArt, cosmeticArt });
   }
 
   const boardArt = await importImage(library, 'Expedition board art', { seed: 3800 });
@@ -488,7 +417,7 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
 
   setProductionStatus(library, production.id, 'ready');
   const publication = await publishProduction(library, production.id);
-  return { contract, canon, production, publication, perCharacter, crisisArt, relicArt, worldCover };
+  return { contract, canon, production, publication, perCharacter, emberguard, relicArt, cosmeticArt, worldCover, journeyArt };
 }
 
 export const CONSUMER_BUILDERS = {

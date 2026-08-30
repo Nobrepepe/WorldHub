@@ -2,8 +2,8 @@
   "format": "world-hub-application-contract",
   "contractFormatVersion": 1,
   "appType": "hero-collector.content-pack",
-  "name": "Hero Collector — Content Pack",
-  "description": "A complete authored content pack: worlds with campaigns, encounters, a four-piece relic, and Mastery skins; characters with acquisition setup, equipment lines, and skins; factions; the expedition library; and the crisis library. Mechanical definitions (balance, formulas, tier profiles, recipes) stay bundled with the game — enum fields here reference those bundled vocabularies.",
+  "name": "Hero Collector \u2014 Creative Manifest",
+  "description": "The worlds and people of a Hero Collector game: who exists, in what order, what they are called, and what they look like. Nothing here decides anything mechanical. Power thresholds, material families and grades, node rewards, relic and hero-reveal positions, recruitment cost, Expedition routes, Crisis Fronts and Mastery milestones are all computed by the game from its own balance files \u2014 so renaming a node can never move its Power, and adding a world needs nothing here but the world.",
   "supportedProtocolVersions": [
     1,
     2
@@ -17,7 +17,7 @@
       "required": true,
       "minItems": 1,
       "maxItems": 20,
-      "hint": "Published chapters drive progression. Thresholds must never decrease along the campaign.",
+      "hint": "The opening track, shared by every world. The game introduces each world's first five heroes along it, so it needs one chapter per two published worlds \u2014 with four worlds, publish at least two chapters.",
       "fields": [
         {
           "id": "chapter_title",
@@ -27,748 +27,34 @@
           "maxLength": 120
         },
         {
-          "id": "chapter_nodes",
-          "label": "Nodes — ten, in order",
-          "type": "list",
-          "required": true,
-          "minItems": 10,
-          "maxItems": 10,
-          "fields": [
-            {
-              "id": "mnode_name",
-              "label": "Node name",
-              "type": "shortText",
-              "required": true,
-              "maxLength": 120
-            },
-            {
-              "id": "mnode_threshold",
-              "label": "Power threshold",
-              "type": "integer",
-              "required": true,
-              "min": 0,
-              "max": 1000000
-            },
-            {
-              "id": "mnode_family",
-              "label": "Material family",
-              "type": "enum",
-              "required": true,
-              "options": [
-                {
-                  "value": "metal",
-                  "label": "Metal"
-                },
-                {
-                  "value": "fiber",
-                  "label": "Fiber"
-                },
-                {
-                  "value": "mineral",
-                  "label": "Mineral"
-                },
-                {
-                  "value": "compound",
-                  "label": "Compound"
-                },
-                {
-                  "value": "mechanism",
-                  "label": "Mechanism"
-                },
-                {
-                  "value": "essence",
-                  "label": "Essence"
-                }
-              ]
-            },
-            {
-              "id": "mnode_grade",
-              "label": "Material grade",
-              "type": "enum",
-              "required": true,
-              "options": [
-                {
-                  "value": "basic",
-                  "label": "Basic"
-                },
-                {
-                  "value": "improved",
-                  "label": "Improved"
-                },
-                {
-                  "value": "advanced",
-                  "label": "Advanced"
-                },
-                {
-                  "value": "superior",
-                  "label": "Superior"
-                },
-                {
-                  "value": "masterwork",
-                  "label": "Masterwork"
-                }
-              ]
-            },
-            {
-              "id": "mnode_encounter_character",
-              "label": "Encounter — revealed hero",
-              "type": "entityRef",
-              "entityTypes": [
-                "character"
-              ],
-              "required": false,
-              "hint": "Optional: the first clear reveals this hero as a Development Focus target and stakes 2 shards."
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "hc_factions",
-      "label": "Factions",
-      "section": "Factions",
-      "type": "list",
-      "required": false,
-      "maxItems": 40,
-      "hint": "Team-synergy factions characters can belong to.",
-      "fields": [
-        {
-          "id": "faction_id",
-          "label": "Faction id",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 60,
-          "hint": "Stable lowercase id, e.g. faction_village_shadows. Character faction fields refer to this."
-        },
-        {
-          "id": "faction_name",
-          "label": "Display name",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 80
-        },
-        {
-          "id": "faction_explanation",
-          "label": "Explanation",
-          "type": "multilineText",
-          "required": false,
-          "maxLength": 400
-        }
-      ]
-    },
-    {
-      "id": "hc_expedition_requirements",
-      "label": "Expedition requirements",
-      "section": "Expedition rules",
-      "advanced": true,
-      "type": "list",
-      "required": false,
-      "maxItems": 100,
-      "fields": [
-        {
-          "id": "expreq_id",
-          "label": "Requirement id",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 60
-        },
-        {
-          "id": "expreq_type",
-          "label": "Type",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 60,
-          "hint": "A requirement type the game understands, e.g. tag_count, archetype_count."
-        },
-        {
-          "id": "expreq_world",
-          "label": "World id",
-          "type": "entityRef",
-          "entityTypes": [
-            "world"
-          ],
-          "required": false,
-          "hint": "Leave empty for any world."
-        },
-        {
-          "id": "expreq_count",
-          "label": "Count",
-          "type": "integer",
-          "required": false,
-          "min": 1,
-          "max": 10
-        },
-        {
-          "id": "expreq_text",
-          "label": "Requirement text",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 200
-        }
-      ]
-    },
-    {
-      "id": "hc_expedition_objectives",
-      "label": "Expedition optional objectives",
-      "section": "Expedition rules",
-      "advanced": true,
-      "type": "list",
-      "required": false,
-      "maxItems": 100,
-      "fields": [
-        {
-          "id": "expobj_id",
-          "label": "Objective id",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 60
-        },
-        {
-          "id": "expobj_type",
-          "label": "Type",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 60
-        },
-        {
-          "id": "expobj_count",
-          "label": "Count",
-          "type": "integer",
-          "required": false,
-          "min": 1,
-          "max": 10
-        },
-        {
-          "id": "expobj_text",
-          "label": "Objective text",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 200
-        }
-      ]
-    },
-    {
-      "id": "hc_expedition_rewards",
-      "label": "Expedition reward packages",
-      "section": "Expedition rewards",
-      "advanced": true,
-      "type": "list",
-      "required": false,
-      "maxItems": 100,
-      "fields": [
-        {
-          "id": "expreward_id",
-          "label": "Package id",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 60
-        },
-        {
-          "id": "expreward_name",
-          "label": "Display name",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 80
-        },
-        {
-          "id": "expreward_lead_min",
-          "label": "Character lead — shards, minimum",
-          "type": "integer",
-          "required": false,
-          "min": 1,
-          "max": 100,
-          "hint": "With a maximum set, routes using this package carry a character lead: the player chooses a revealed hero of the route’s world to receive the shards."
-        },
-        {
-          "id": "expreward_lead_max",
-          "label": "Character lead — shards, maximum",
-          "type": "integer",
-          "required": false,
-          "min": 1,
-          "max": 100
-        },
-        {
-          "id": "expreward_entries",
-          "label": "Entries",
-          "type": "list",
-          "required": true,
-          "minItems": 1,
-          "maxItems": 10,
-          "fields": [
-            {
-              "id": "rentry_kind",
-              "label": "Kind",
-              "type": "enum",
-              "required": true,
-              "options": [
-                {
-                  "value": "resource",
-                  "label": "Resource"
-                },
-                {
-                  "value": "material",
-                  "label": "Material"
-                },
-                {
-                  "value": "component",
-                  "label": "Component"
-                },
-                {
-                  "value": "shards",
-                  "label": "Character shards"
-                },
-                {
-                  "value": "energy",
-                  "label": "Energy"
-                }
-              ]
-            },
-            {
-              "id": "rentry_id",
-              "label": "Target id",
-              "type": "shortText",
-              "required": false,
-              "maxLength": 60,
-              "hint": "Resource/material/component id from the bundled game vocabularies, or empty."
-            },
-            {
-              "id": "rentry_amount",
-              "label": "Amount",
-              "type": "integer",
-              "required": true,
-              "min": 1,
-              "max": 100000
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "hc_expedition_templates",
-      "label": "Expedition templates",
-      "section": "Expedition rewards",
-      "advanced": true,
-      "type": "list",
-      "required": false,
-      "maxItems": 100,
-      "fields": [
-        {
-          "id": "exptpl_id",
-          "label": "Template id",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 60
-        },
-        {
-          "id": "exptpl_world",
-          "label": "World",
-          "type": "entityRef",
-          "entityTypes": [
-            "world"
-          ],
-          "required": false
-        },
-        {
-          "id": "exptpl_party_size",
-          "label": "Party size",
-          "type": "integer",
-          "required": true,
-          "min": 1,
-          "max": 4
-        },
-        {
-          "id": "exptpl_requirement_ids",
-          "label": "Requirement ids",
-          "type": "list",
-          "required": false,
-          "maxItems": 6,
-          "item": {
-            "id": "exptpl_req",
-            "label": "Requirement id",
-            "type": "shortText",
-            "maxLength": 60
-          }
-        },
-        {
-          "id": "exptpl_optional_ids",
-          "label": "Optional objective ids",
-          "type": "list",
-          "required": false,
-          "maxItems": 6,
-          "item": {
-            "id": "exptpl_opt",
-            "label": "Objective id",
-            "type": "shortText",
-            "maxLength": 60
-          }
-        },
-        {
-          "id": "exptpl_reward_package",
-          "label": "Reward package id",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 60
-        },
-        {
-          "id": "exptpl_power_ratio_bp",
-          "label": "Recommended power (basis points)",
-          "type": "integer",
-          "required": false,
-          "min": 1000,
-          "max": 30000
-        },
-        {
-          "id": "exptpl_titles",
-          "label": "Offer titles",
-          "type": "list",
-          "required": false,
-          "maxItems": 6,
-          "item": {
-            "id": "exptpl_title",
-            "label": "Title",
-            "type": "shortText",
-            "maxLength": 120
-          }
-        },
-        {
-          "id": "exptpl_descriptions",
-          "label": "Offer prose",
-          "type": "list",
-          "required": false,
-          "maxItems": 6,
-          "item": {
-            "id": "exptpl_desc",
-            "label": "Description",
-            "type": "multilineText",
-            "maxLength": 500
-          }
-        },
-        {
-          "id": "exptpl_supply",
-          "label": "Guaranteed Field Supply route",
-          "type": "boolean",
-          "required": false,
-          "hint": "This route always carries one Field Supply and never rerolls. The first such template becomes the board’s guaranteed Supply route."
-        }
-      ],
-      "hint": "Routes ride the shared Expedition cycle; there are no per-template durations."
-    },
-    {
-      "id": "hc_crises",
-      "label": "Crisis definitions",
-      "section": "Crises",
-      "type": "list",
-      "required": false,
-      "maxItems": 60,
-      "fields": [
-        {
-          "id": "crisis_id",
-          "label": "Crisis id",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 60
-        },
-        {
-          "id": "crisis_world",
-          "label": "World",
-          "type": "entityRef",
-          "entityTypes": [
-            "world"
-          ],
-          "required": true
-        },
-        {
-          "id": "crisis_name",
-          "label": "Name",
-          "type": "shortText",
-          "required": true,
-          "maxLength": 120
-        },
-        {
-          "id": "crisis_opening",
-          "label": "Opening description",
-          "type": "multilineText",
-          "required": false,
-          "maxLength": 1000
-        },
-        {
-          "id": "crisis_art",
-          "label": "Artwork",
+          "id": "chapter_art",
+          "label": "Chapter backdrop",
           "type": "assetRef",
           "required": false,
           "assetKinds": [
             "image"
           ],
+          "assetRoles": [
+            "world.background"
+          ],
           "recipes": [
             "tile_16x9"
-          ]
-        },
-        {
-          "id": "crisis_fronts",
-          "label": "Fronts",
-          "type": "list",
-          "required": true,
-          "minItems": 3,
-          "maxItems": 3,
-          "fields": [
-            {
-              "id": "front_id",
-              "label": "Front id",
-              "type": "shortText",
-              "required": true,
-              "maxLength": 60
-            },
-            {
-              "id": "front_name",
-              "label": "Name",
-              "type": "shortText",
-              "required": true,
-              "maxLength": 120
-            },
-            {
-              "id": "front_description",
-              "label": "Description",
-              "type": "multilineText",
-              "required": false,
-              "maxLength": 500
-            },
-            {
-              "id": "front_favored_tags",
-              "label": "Favored tag ids",
-              "type": "list",
-              "required": true,
-              "maxItems": 2,
-              "item": {
-                "id": "front_tag",
-                "label": "Tag id",
-                "type": "shortText",
-                "maxLength": 60
-              },
-              "minItems": 1,
-              "hint": "One or two tag ids from the bundled tag vocabulary."
-            },
-            {
-              "id": "front_power_local",
-              "label": "Recommended power — local",
-              "type": "integer",
-              "required": false,
-              "min": 0,
-              "max": 100000
-            },
-            {
-              "id": "front_power_major",
-              "label": "Recommended power — major",
-              "type": "integer",
-              "required": false,
-              "min": 0,
-              "max": 100000
-            },
-            {
-              "id": "front_power_world",
-              "label": "Recommended power — world",
-              "type": "integer",
-              "required": false,
-              "min": 0,
-              "max": 100000
-            },
-            {
-              "id": "front_struggle_text",
-              "label": "Struggle text",
-              "type": "multilineText",
-              "required": false,
-              "maxLength": 400
-            },
-            {
-              "id": "front_success_text",
-              "label": "Success text",
-              "type": "multilineText",
-              "required": false,
-              "maxLength": 400
-            },
-            {
-              "id": "front_excel_text",
-              "label": "Excel text",
-              "type": "multilineText",
-              "required": false,
-              "maxLength": 400
-            }
-          ]
-        },
-        {
-          "id": "crisis_consolation",
-          "label": "Consolation reward entries",
-          "type": "list",
-          "required": false,
-          "maxItems": 5,
-          "fields": [
-            {
-              "id": "cons_kind",
-              "label": "Kind",
-              "type": "enum",
-              "required": true,
-              "options": [
-                {
-                  "value": "resource",
-                  "label": "Resource"
-                },
-                {
-                  "value": "material",
-                  "label": "Material"
-                },
-                {
-                  "value": "component",
-                  "label": "Component"
-                },
-                {
-                  "value": "shards",
-                  "label": "Character shards"
-                },
-                {
-                  "value": "energy",
-                  "label": "Energy"
-                }
-              ]
-            },
-            {
-              "id": "cons_id",
-              "label": "Target id",
-              "type": "shortText",
-              "required": false,
-              "maxLength": 60
-            },
-            {
-              "id": "cons_amount",
-              "label": "Amount",
-              "type": "integer",
-              "required": true,
-              "min": 1,
-              "max": 100000
-            }
-          ]
-        },
-        {
-          "id": "crisis_cache_choices",
-          "label": "Cache choices",
-          "type": "list",
-          "required": true,
-          "maxItems": 4,
-          "fields": [
-            {
-              "id": "cache_id",
-              "label": "Cache id",
-              "type": "shortText",
-              "required": true,
-              "maxLength": 60
-            },
-            {
-              "id": "cache_name",
-              "label": "Name",
-              "type": "shortText",
-              "required": true,
-              "maxLength": 120
-            },
-            {
-              "id": "cache_entries",
-              "label": "Entries",
-              "type": "list",
-              "required": true,
-              "minItems": 1,
-              "maxItems": 5,
-              "fields": [
-                {
-                  "id": "centry_kind",
-                  "label": "Kind",
-                  "type": "enum",
-                  "required": true,
-                  "options": [
-                    {
-                      "value": "resource",
-                      "label": "Resource"
-                    },
-                    {
-                      "value": "material",
-                      "label": "Material"
-                    },
-                    {
-                      "value": "component",
-                      "label": "Component"
-                    },
-                    {
-                      "value": "shards",
-                      "label": "Character shards"
-                    },
-                    {
-                      "value": "energy",
-                      "label": "Energy"
-                    }
-                  ]
-                },
-                {
-                  "id": "centry_id",
-                  "label": "Target id",
-                  "type": "shortText",
-                  "required": false,
-                  "maxLength": 60
-                },
-                {
-                  "id": "centry_amount",
-                  "label": "Amount",
-                  "type": "integer",
-                  "required": true,
-                  "min": 1,
-                  "max": 100000
-                }
-              ]
-            }
           ],
-          "minItems": 3,
-          "hint": "Three or four Emergency Cache choices."
+          "hint": "A 16:9 backdrop for this chapter. Left blank, the chapter borrows the backdrop of the world it introduces."
         },
         {
-          "id": "crisis_boon_type",
-          "label": "Boon type",
-          "type": "enum",
+          "id": "chapter_nodes",
+          "label": "Node names \u2014 ten, in order",
+          "type": "list",
           "required": true,
-          "options": [
-            {
-              "value": "free_world_node_runs",
-              "label": "Free world node runs"
-            },
-            {
-              "value": "bonus_world_material_runs",
-              "label": "Bonus world material runs"
-            },
-            {
-              "value": "instant_intelligence",
-              "label": "Instant intelligence"
-            }
-          ],
-          "hint": "A boon mechanic the game understands."
-        },
-        {
-          "id": "crisis_boon_runs",
-          "label": "Boon — runs",
-          "type": "integer",
-          "required": false,
-          "min": 1,
-          "max": 20,
-          "hint": "For run-count boons."
-        },
-        {
-          "id": "crisis_boon_qty",
-          "label": "Boon — quantity",
-          "type": "integer",
-          "required": false,
-          "min": 1,
-          "max": 100,
-          "hint": "For quantity boons."
-        },
-        {
-          "id": "crisis_boon_prose",
-          "label": "Boon — prose",
-          "type": "multilineText",
-          "required": false,
-          "maxLength": 400
+          "minItems": 10,
+          "maxItems": 10,
+          "item": {
+            "id": "mnode_name",
+            "label": "Node name",
+            "type": "shortText",
+            "maxLength": 120
+          }
         }
       ]
     }
@@ -782,7 +68,7 @@
       ],
       "min": 1,
       "ordered": true,
-      "hint": "Playable worlds. Name, tagline, and description come from the canonical world profile.",
+      "hint": "Playable worlds, in the order they should be met \u2014 that order is the game's progression order. Name, tagline and description come from the canonical world profile.",
       "fields": [
         {
           "id": "hc_world_icon",
@@ -795,33 +81,24 @@
         },
         {
           "id": "hc_palette_primary",
-          "label": "Palette — primary",
+          "label": "Palette \u2014 primary",
           "section": "Look",
           "type": "color",
           "required": false
         },
         {
           "id": "hc_palette_accent",
-          "label": "Palette — accent",
+          "label": "Palette \u2014 accent",
           "section": "Look",
           "type": "color",
           "required": false
         },
         {
           "id": "hc_palette_dark",
-          "label": "Palette — dark",
+          "label": "Palette \u2014 dark",
           "section": "Look",
           "type": "color",
           "required": false
-        },
-        {
-          "id": "hc_world_display_order",
-          "label": "Display order",
-          "section": "Look",
-          "type": "integer",
-          "required": false,
-          "min": 0,
-          "max": 99
         },
         {
           "id": "hc_chapter_titles",
@@ -840,113 +117,32 @@
         },
         {
           "id": "hc_campaign_nodes",
-          "label": "World campaign nodes",
+          "label": "Campaign node names \u2014 thirty, in order",
           "section": "Campaign",
           "type": "list",
           "required": true,
           "minItems": 30,
           "maxItems": 30,
-          "hint": "Thirty nodes: ten per chapter, in order.",
-          "fields": [
-            {
-              "id": "node_name",
-              "label": "Node name",
-              "type": "shortText",
-              "required": true,
-              "maxLength": 120
-            },
-            {
-              "id": "node_threshold",
-              "label": "Power threshold",
-              "type": "integer",
-              "required": true,
-              "min": 0,
-              "max": 1000000
-            },
-            {
-              "id": "node_family",
-              "label": "Material family",
-              "type": "enum",
-              "required": true,
-              "options": [
-                {
-                  "value": "metal",
-                  "label": "Metal"
-                },
-                {
-                  "value": "fiber",
-                  "label": "Fiber"
-                },
-                {
-                  "value": "mineral",
-                  "label": "Mineral"
-                },
-                {
-                  "value": "compound",
-                  "label": "Compound"
-                },
-                {
-                  "value": "mechanism",
-                  "label": "Mechanism"
-                },
-                {
-                  "value": "essence",
-                  "label": "Essence"
-                }
-              ]
-            },
-            {
-              "id": "node_grade",
-              "label": "Material grade",
-              "type": "enum",
-              "required": true,
-              "options": [
-                {
-                  "value": "basic",
-                  "label": "Basic"
-                },
-                {
-                  "value": "improved",
-                  "label": "Improved"
-                },
-                {
-                  "value": "advanced",
-                  "label": "Advanced"
-                },
-                {
-                  "value": "superior",
-                  "label": "Superior"
-                },
-                {
-                  "value": "masterwork",
-                  "label": "Masterwork"
-                }
-              ]
-            },
-            {
-              "id": "node_encounter_character",
-              "label": "Encounter — revealed hero",
-              "type": "entityRef",
-              "entityTypes": [
-                "character"
-              ],
-              "required": false,
-              "hint": "Optional: the first clear reveals this hero as a Development Focus target and stakes 2 shards. Must be a hero of this world."
-            }
-          ]
+          "hint": "Ten per chapter. Names only: the game sets every threshold, drop and reward, and places the relic pieces and hero reveals along the way.",
+          "item": {
+            "id": "node_name",
+            "label": "Node name",
+            "type": "shortText",
+            "maxLength": 120
+          }
         },
         {
           "id": "hc_relic_name",
-          "label": "Relic — name",
+          "label": "Relic \u2014 name",
           "section": "Relic",
           "type": "shortText",
           "required": true,
           "maxLength": 120,
-          "hint": "The world’s single major relic, reassembled from four pieces."
+          "hint": "The world's single major relic, reassembled from four pieces found along its campaign."
         },
         {
           "id": "hc_relic_lore",
-          "label": "Relic — lore",
+          "label": "Relic \u2014 lore",
           "section": "Relic",
           "type": "multilineText",
           "required": false,
@@ -954,13 +150,13 @@
         },
         {
           "id": "hc_relic_pieces",
-          "label": "Relic pieces — four, in order",
+          "label": "Relic pieces \u2014 four, in order",
           "section": "Relic",
           "type": "list",
           "required": true,
           "minItems": 4,
           "maxItems": 4,
-          "hint": "Found by first-clearing World Campaign nodes 4, 9, 15, and 21, in this order.",
+          "hint": "The game decides which campaign nodes hide them.",
           "fields": [
             {
               "id": "piece_name",
@@ -991,55 +187,43 @@
           ]
         },
         {
-          "id": "hc_mastery_skins",
-          "label": "Mastery skins",
-          "section": "Mastery skins",
+          "id": "hc_mastery_cosmetics",
+          "label": "Mastery cosmetics \u2014 in the order they should be earned",
+          "section": "Mastery",
           "type": "list",
           "required": false,
           "maxItems": 4,
-          "hint": "Cosmetic skins unlocked at Mastery ranks. Each references a skin declared on the character (its skin_id).",
+          "hint": "Alternate looks for this world's heroes. The first is awarded at the first Mastery milestone that grants one, the second at the next, and so on \u2014 which milestones those are is the game's to decide.",
           "fields": [
             {
-              "id": "ms_rank",
-              "label": "Rank",
-              "type": "enum",
-              "required": true,
-              "options": [
-                {
-                  "value": "known",
-                  "label": "Known"
-                },
-                {
-                  "value": "established",
-                  "label": "Established"
-                },
-                {
-                  "value": "rooted",
-                  "label": "Rooted"
-                },
-                {
-                  "value": "mastered",
-                  "label": "Mastered"
-                }
-              ]
-            },
-            {
-              "id": "ms_character",
+              "id": "mc_character",
               "label": "Character",
               "type": "entityRef",
               "entityTypes": [
                 "character"
               ],
               "required": true,
-              "hint": "A hero of this world."
+              "hint": "Must be a hero of this world."
             },
             {
-              "id": "ms_skin_id",
-              "label": "Skin id",
+              "id": "mc_name",
+              "label": "Cosmetic name",
               "type": "shortText",
               "required": true,
-              "maxLength": 60,
-              "hint": "The skin_id of one of that character’s declared skins."
+              "maxLength": 120
+            },
+            {
+              "id": "mc_art",
+              "label": "Cosmetic art",
+              "type": "assetRef",
+              "required": false,
+              "assetKinds": [
+                "image"
+              ],
+              "recipes": [
+                "square",
+                "thumbnail_square"
+              ]
             }
           ]
         }
@@ -1057,16 +241,17 @@
           "recipes": [
             "tile_16x9"
           ],
-          "exact": 1
+          "exact": 1,
+          "hint": "Also carries this world's Crisis."
         },
         {
           "id": "hc_chapter_art",
-          "label": "Chapter art — three, in order",
+          "label": "Chapter art \u2014 three, in order",
           "kinds": [
             "image"
           ],
           "roles": [
-            "scene.key_art"
+            "world.background"
           ],
           "recipes": [
             "tile_16x9"
@@ -1085,12 +270,11 @@
       ],
       "min": 1,
       "ordered": true,
-      "hint": "Collectible characters. Name, summary, and lore come from the canonical profile; these fields configure gameplay presentation.",
+      "hint": "The cast, in the order they should be met. Within each world, the first five are the ones the Main Campaign introduces; the rest are revealed along their own world's campaign. Every hero costs the same to recruit and joins at the same Star, so this order is narrative, not mechanical.",
       "fields": [
         {
           "id": "hc_archetype",
           "label": "Archetype",
-          "section": "Role",
           "type": "enum",
           "required": true,
           "options": [
@@ -1121,71 +305,14 @@
           ]
         },
         {
-          "id": "hc_tier",
-          "label": "Acquisition tier",
-          "section": "Role",
-          "type": "enum",
-          "required": true,
-          "options": [
-            {
-              "value": "minor",
-              "label": "Minor"
-            },
-            {
-              "value": "medium",
-              "label": "Medium"
-            },
-            {
-              "value": "major",
-              "label": "Major"
-            }
-          ]
-        },
-        {
-          "id": "hc_starting",
-          "label": "Starting character",
-          "section": "Role",
-          "type": "boolean",
-          "required": false
-        },
-        {
           "id": "hc_faction",
-          "label": "Faction id",
-          "section": "Role",
-          "type": "shortText",
+          "label": "Faction",
+          "type": "entityRef",
+          "entityTypes": [
+            "group"
+          ],
           "required": false,
-          "maxLength": 60,
-          "hint": "One of the faction ids declared in this production's Factions list."
-        },
-        {
-          "id": "hc_extra_tags",
-          "label": "Extra tag ids",
-          "section": "Role",
-          "type": "list",
-          "required": false,
-          "maxItems": 8,
-          "item": {
-            "id": "hc_tag",
-            "label": "Tag id",
-            "type": "shortText",
-            "maxLength": 60
-          },
-          "hint": "Tag ids from the bundled tag vocabulary, e.g. tag_scholar."
-        },
-        {
-          "id": "hc_glyph",
-          "label": "Glyph",
-          "section": "Look",
-          "type": "shortText",
-          "required": false,
-          "maxLength": 4
-        },
-        {
-          "id": "hc_color",
-          "label": "Accent color",
-          "section": "Look",
-          "type": "color",
-          "required": false
+          "hint": "A group this character belongs to. Select the same group under Factions for it to grant party synergy; how much it is worth is the game's to tune."
         },
         {
           "id": "hc_equipment",
@@ -1194,7 +321,7 @@
           "type": "list",
           "required": false,
           "maxItems": 6,
-          "hint": "One entry per slot: attire, tool, accessory, keepsake, emblem, signature.",
+          "hint": "What this character's six recurring pieces are called. The game sets what they cost and what they are worth.",
           "fields": [
             {
               "id": "equip_slot",
@@ -1230,7 +357,7 @@
             },
             {
               "id": "equip_name",
-              "label": "Line name",
+              "label": "Name",
               "type": "shortText",
               "required": true,
               "maxLength": 120
@@ -1244,44 +371,11 @@
                 "image"
               ],
               "recipes": [
-                "square"
-              ]
-            }
-          ]
-        },
-        {
-          "id": "hc_skins",
-          "label": "Skins",
-          "section": "Skins",
-          "type": "list",
-          "required": false,
-          "maxItems": 10,
-          "fields": [
-            {
-              "id": "skin_id",
-              "label": "Skin id",
-              "type": "shortText",
-              "required": true,
-              "maxLength": 60,
-              "hint": "Stable id referenced by Mastery skin milestones."
-            },
-            {
-              "id": "skin_name",
-              "label": "Skin name",
-              "type": "shortText",
-              "required": true,
-              "maxLength": 120
-            },
-            {
-              "id": "skin_art",
-              "label": "Art",
-              "type": "assetRef",
-              "required": false,
-              "assetKinds": [
-                "image"
+                "square",
+                "thumbnail_square"
               ],
-              "recipes": [
-                "full_body_9x16"
+              "assetRoles": [
+                "character.collectible"
               ]
             }
           ]
@@ -1290,18 +384,18 @@
       "assetSets": [
         {
           "id": "hc_portrait",
-          "label": "Portrait",
+          "label": "Character tile",
           "kinds": [
             "image"
           ],
           "roles": [
-            "character.portrait"
+            "character.tile"
           ],
           "recipes": [
-            "square",
-            "thumbnail_square"
+            "tile_16x9"
           ],
-          "exact": 1
+          "exact": 1,
+          "hint": "A 16:9 tile. Shown wherever the character is listed or chosen."
         },
         {
           "id": "hc_full_body",
@@ -1319,6 +413,25 @@
           "max": 1
         }
       ]
+    },
+    {
+      "id": "hc_factions",
+      "label": "Factions",
+      "entityTypes": [
+        "group"
+      ],
+      "min": 0,
+      "hint": "Groups whose members work well together. Name and description come from the canonical group profile; a character joins one by selecting it as their Faction. Selecting no groups is fine \u2014 the game simply has no faction synergy.",
+      "fields": [
+        {
+          "id": "hc_faction_explanation",
+          "label": "Why they work together",
+          "type": "multilineText",
+          "required": false,
+          "maxLength": 400,
+          "hint": "Shown when a party lights this faction's synergy. Defaults to the group's own summary."
+        }
+      ]
     }
   ],
   "assetSets": [
@@ -1329,13 +442,14 @@
         "image"
       ],
       "roles": [
-        "scene.key_art"
+        "world.background"
       ],
       "recipes": [
         "tile_16x9"
       ],
       "min": 0,
-      "max": 1
+      "max": 1,
+      "hint": "Backs every across-world route on the Expedition board, and its party screen. World-scoped routes use their own world background."
     }
   ],
   "documents": {

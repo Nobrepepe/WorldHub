@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeTestLibrary, makeTempDir } from './helpers.mjs';
 import {
-  EXAMPLE_CONTRACT_PATH, importContractFile, contractDrift, createContract, getContract,
+  EXAMPLE_CONTRACT_PATH, importContractFile, contractDrift, createContract, getContract, updateContract,
 } from '../electron/services/contract-service.js';
 import { createProduction, setProductionValue, setSelection, setAssetSetItems, setProductionStatus }
   from '../electron/services/production-service.js';
@@ -89,7 +89,7 @@ test('drift can be asked about without changing the answer', async (t) => {
 
   const first = contractDrift(library, imported.contractId);
   assert.equal(first.drifted, true);
-  assert.equal(first.reason, 'changed');
+  assert.equal(first.reason, 'file_changed');
   assert.match(first.message, /application-contract\.json/, 'the message names the file');
 
   const second = contractDrift(library, imported.contractId);
@@ -215,4 +215,47 @@ test('importing a file that matches an app-authored contract adopts it in place'
   assert.equal(imported.version, before.version, 'and no pointless new revision');
   assert.equal(imported.sourcePath, file, 'but it now knows where it came from');
   assert.equal(contractDrift(library, imported.contractId).drifted, false);
+});
+
+test('editing an imported contract in the app is drift, not a way around the check', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const dir = makeTempDir('consumer-repo-');
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const file = writeContractFile(dir);
+  const imported = importContractFile(library, file);
+
+  /* The old way in: type over the contract in World Hub's own JSON editor.
+     If that dropped the provenance, the guard would simply vanish and a
+     production could publish against a contract the application never saw. */
+  updateContract(library, imported.contractId, {
+    ...imported.contract, description: 'changed here rather than in the repository',
+  });
+
+  const drift = contractDrift(library, imported.contractId);
+  assert.equal(drift.tracked, true, 'a new version still knows where the contract came from');
+  assert.equal(drift.drifted, true);
+  assert.equal(drift.reason, 'edited_here');
+  assert.match(drift.message, /edited in World Hub/);
+  assert.match(drift.message, /authoritative/);
+});
+
+test('drift is found by comparing documents, not file bytes', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const dir = makeTempDir('consumer-repo-');
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const file = writeContractFile(dir);
+  const imported = importContractFile(library, file);
+
+  /* Same document, different bytes: reformatted, keys reordered. Nothing has
+     actually changed, and reporting drift here would train people to ignore it. */
+  const reformatted = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const shuffled = Object.fromEntries(Object.entries(reformatted).reverse());
+  fs.writeFileSync(file, JSON.stringify(shuffled, null, 4));
+
+  assert.equal(contractDrift(library, imported.contractId).drifted, false,
+    'reformatting a file is not a change to the contract');
 });
