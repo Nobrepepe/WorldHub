@@ -276,6 +276,25 @@ export async function renderProductionDetail({ id }) {
         issuesEl.append(el('div', { class: `issue ${issue.severity}` },
           el('span', { class: 'issue-sev' }, issue.severity), ' ',
           el('span', { class: 'issue-text' }, issue.message), ' ',
+          /* A canonical connection pointing at a record this production has
+             not selected is worth saying and worth acting on, but never worth
+             acting on silently: the package carries what the author chose, so
+             adding the other end is an offer, not a traversal. */
+          issue.target?.targetEntityId && !getState().library?.readOnly ? el('button', {
+            class: 'btn', style: { padding: '0 0.3rem' },
+            onclick: async () => {
+              const slot = issue.target.targetSelection;
+              const chosen = (live().selections[slot] ?? []).map((entity) => entity.id);
+              const updated = await callSafe('production.setSelection', {
+                id, slot, entityIds: [...chosen, issue.target.targetEntityId],
+              });
+              if (updated) {
+                showToast(`${issue.target.targetName} was added.`, 'good');
+                await reload();
+              }
+            },
+          }, `Add ${issue.target.targetName} →`) : null,
+          ' ',
           el('button', {
             class: 'btn', style: { padding: '0 0.3rem' },
             onclick: () => revealDestination(issue.destination),

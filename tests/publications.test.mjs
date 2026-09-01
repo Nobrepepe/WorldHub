@@ -57,7 +57,8 @@ test('publishing creates a complete verified package with checksums over every f
 
   /* structure */
   for (const expected of ['manifest.json', 'checksums.json', 'catalog/entities.json', 'catalog/worlds.json',
-    'catalog/characters.json', 'catalog/relationships.json', 'catalog/tags.json', 'catalog/documents.json',
+    'catalog/characters.json', 'catalog/relationships.json', 'catalog/connection-kinds.json',
+    'catalog/tags.json', 'catalog/documents.json',
     'production/contract.json', 'production/content.json', 'assets/index.json']) {
     assert.ok(fs.existsSync(path.join(packageDir, ...expected.split('/'))), `missing ${expected}`);
   }

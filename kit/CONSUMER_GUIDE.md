@@ -102,7 +102,56 @@ This matters more than it sounds. Three applications once had green suites
 drift instead of catching it, for eleven days. A fixture that cannot go stale
 is the only kind worth keeping.
 
-## 7. What belongs in a contract
+## 7. Canonical facts between records
+
+Records are joined by *connections*, and every connection names a reusable
+*kind* — `member_of`, `mentor_of`, `allied_with` — that carries the labels and
+decides which way the fact runs. `catalog/relationships.json` holds them, and
+`catalog/connection-kinds.json` holds what each kind means, so a setting that
+invents its own kind needs no change in your code.
+
+Read them through the reader rather than by hand:
+
+```js
+pkg.connectionsFrom(characterId, 'member_of')   // running out of a record
+pkg.connectionsTo(groupId, 'member_of')         // running into one
+pkg.connectionsFor(characterId)                 // both, each with direction,
+                                                // otherId, and the label that
+                                                // record wears
+```
+
+Python is the same shape: `connections_from`, `connections_to`, `connections_for`.
+
+Two rules worth keeping:
+
+**Do not hard-code a label.** `connectionLabel(connection, direction)` resolves
+it through the kind, so a rename in World Hub reaches you. Reading `label` off
+the record works too, but it is the fallback the older packages carry.
+
+**Do not assume both ends are in the package.** A publication carries only the
+records its production selected; a connection whose other end was not selected
+does not ship at all, and World Hub warns its author rather than dragging the
+rest of the world in behind it. If your application *needs* a connection, say
+so in your contract with a `connectionSelections` entry and World Hub will
+refuse to publish without it:
+
+```json
+"connectionSelections": [{
+  "id": "faction_membership", "label": "Faction memberships",
+  "kinds": ["member_of"],
+  "sourceSelection": "characters", "targetSelection": "factions",
+  "minPerSource": 0, "maxPerSource": 1
+}]
+```
+
+`maxPerSource` is where the boundary sits. Canon may allow a character in
+several groups; if your game shows one faction, that restriction is yours and
+belongs in your contract — never in the fiction.
+
+Packages published before connections carried kinds simply have no
+`connection-kinds.json`, and the reader loads them unchanged.
+
+## 8. What belongs in a contract
 
 **The contract carries what a writer would change. The repository carries what
 a designer would tune.**
@@ -116,7 +165,7 @@ does not belong to it. It makes the production screen unusable for the person
 authoring the fiction, and World Hub cannot check the cross-references such
 data always grows, so a typo publishes clean and fails at runtime.
 
-## 8. What stays yours
+## 9. What stays yours
 
 Player state, progression, saves, settings, conversation history, ownership and
 placements — all app-owned, never round-tripped into World Hub. The Hub is

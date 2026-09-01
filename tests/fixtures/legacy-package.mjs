@@ -46,6 +46,24 @@ export function makeLegacyPackage(source, destination, { retireRecipe = null } =
     contract.supportedProtocolVersions = [1];
   });
 
+  /* Protocol 1 published no connection-kind definitions at all, and its
+     relationships carried only their own labels. Removing them here is what
+     makes this a real backward-compatibility test rather than a current
+     package wearing an old version number. */
+  const kindsFile = path.join(destination, 'catalog', 'connection-kinds.json');
+  if (fs.existsSync(kindsFile)) {
+    fs.rmSync(kindsFile);
+    const checksums = JSON.parse(fs.readFileSync(path.join(destination, 'checksums.json'), 'utf8'));
+    delete checksums['catalog/connection-kinds.json'];
+    fs.writeFileSync(path.join(destination, 'checksums.json'), `${JSON.stringify(checksums, null, 2)}\n`);
+  }
+  changed['catalog/relationships.json'] = rewrite(destination, 'catalog/relationships.json', (relationships) => {
+    for (const relationship of relationships) {
+      delete relationship.kindId;
+      delete relationship.category;
+    }
+  });
+
   /* Protocol 1 named the second character display slot differently. */
   changed['catalog/characters.json'] = rewrite(destination, 'catalog/characters.json', (characters) => {
     for (const character of characters) {

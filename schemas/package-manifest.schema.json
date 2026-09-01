@@ -151,6 +151,12 @@
         "assets": {
           "type": "integer"
         },
+        "connections": {
+          "type": "integer"
+        },
+        "connectionKinds": {
+          "type": "integer"
+        },
         "files": {
           "type": "integer"
         }

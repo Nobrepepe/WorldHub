@@ -19,6 +19,34 @@ export interface AssetIndexEntry extends JsonObject {
   roles?: string[]
 }
 
+/** A published connection kind: what a canonical fact between two records means. */
+export interface ConnectionKind extends JsonObject {
+  id: string
+  category: string
+  forwardLabel: string
+  inverseLabel: string
+  forwardSection: string
+  inverseSection: string
+  symmetric: boolean
+  builtin: boolean
+  /** Ordered [sourceType, targetType] pairs this kind may join. */
+  pairs: [string, string][]
+}
+
+/** A connection read from one record's side. */
+export interface ConnectionFromHere extends JsonObject {
+  id: string
+  sourceId: string
+  targetId: string
+  kindId?: string
+  /** "from" when the record asked about is the source, "to" when it is the target. */
+  direction: 'from' | 'to'
+  /** The record at the other end, whichever column it occupies. */
+  otherId: string
+  /** The label that record wears, resolved through the kind. */
+  label: string
+}
+
 export interface RenamedFrom {
   recipes: Record<string, string[]>
   roles: Record<string, string[]>
@@ -44,6 +72,8 @@ export declare class PackageInfo {
   readonly worlds: JsonObject[]
   readonly characters: JsonObject[]
   readonly relationships: JsonObject[]
+  /** Empty for packages published before kinds were carried. */
+  readonly connectionKinds: ConnectionKind[]
   readonly documents: JsonObject[]
   readonly assetIndex: AssetIndexEntry[]
   readonly checksums: Record<string, string>
@@ -62,6 +92,21 @@ export declare class PackageInfo {
 
   /** The asset set carrying one of these roles, first match wins. */
   setForRole(...roles: string[]): string | null
+
+  /** Every published connection kind, by its stable id. */
+  connectionKindsById(): Map<string, ConnectionKind>
+
+  /** The label one end of a connection wears, resolved through its kind. */
+  connectionLabel(connection: JsonObject, direction: 'from' | 'to'): string
+
+  /** Every connection touching a record, written from that record's side. */
+  connectionsFor(entityId: string): ConnectionFromHere[]
+
+  /** Connections running out of a record, optionally of one kind only. */
+  connectionsFrom(entityId: string, kindId?: string | null): JsonObject[]
+
+  /** Connections running into a record, optionally of one kind only. */
+  connectionsTo(entityId: string, kindId?: string | null): JsonObject[]
 
   /** The best index entry for an asset given a recipe preference order. */
   assetFile(assetId: string, preferredRecipes?: readonly string[]): AssetIndexEntry | null
