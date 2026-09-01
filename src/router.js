@@ -64,6 +64,7 @@ const SECTION_SCREENS = {
   entry: { path: '/entries', title: 'Entries' },
   document: { path: '/documents', title: 'Documents' },
   asset: { path: '/assets', title: 'Assets' },
+  connection: { path: '/connections', title: 'Connections' },
   contract: { path: '/contracts', title: 'Contracts' },
   production: { path: '/productions', title: 'Productions' },
   publication: { path: '/productions', title: 'Productions' },

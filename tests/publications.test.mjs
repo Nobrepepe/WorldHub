@@ -139,11 +139,12 @@ test('art with transparent edges reaches the package with its transparency intac
   assert.ok(nao, 'gallery cast intact');
 });
 
-test('packages are self-contained: actual roles, no dangling profile or document references, no archived relationships', async (t) => {
+test('packages are self-contained: actual roles, no dangling profile or document references, no archived connections', async (t) => {
   const { library, root, cleanup } = await makeTestLibrary();
   t.after(cleanup);
   const { production, world, nao, bram, portraitA, doc } = await readyGallery(library);
-  const { updateEntity: update, createRelationship } = await import('../electron/services/entity-service.js');
+  const { updateEntity: update } = await import('../electron/services/entity-service.js');
+  const { createConnection } = await import('../electron/services/connection-service.js');
   const { setDocumentLinks } = await import('../electron/services/document-service.js');
 
   /* the portrait also carries a second role; only real roles export */
@@ -162,10 +163,10 @@ test('packages are self-contained: actual roles, no dangling profile or document
   const outsider = createEntity(library, { type: 'character', name: 'Outsider' });
   setDocumentLinks(library, doc.id, [nao.id, outsider.id]);
 
-  /* one live and one archived relationship */
-  createRelationship(library, { sourceId: nao.id, targetId: bram.id, relType: 'rival' });
-  const archived = createRelationship(library, { sourceId: nao.id, targetId: world.id, relType: 'exile' });
-  library.db.prepare(`UPDATE relationships SET status = 'archived' WHERE id = ?`).run(archived.id);
+  /* one live and one archived connection */
+  createConnection(library, { kindId: 'rival_of', entityId: nao.id, counterpartId: bram.id });
+  const archived = createConnection(library, { kindId: 'mentor_of', entityId: nao.id, counterpartId: bram.id });
+  library.db.prepare(`UPDATE connections SET status = 'archived' WHERE id = ?`).run(archived.id);
 
   const publication = await publishProduction(library, production.id);
   const packageDir = path.join(root, ...publication.directory.split('/'));
@@ -184,8 +185,8 @@ test('packages are self-contained: actual roles, no dangling profile or document
   assert.deepEqual(documents.find((d) => d.id === doc.id).entityIds, [nao.id], 'document links outside the snapshot are filtered');
 
   const relationships = read('catalog/relationships.json');
-  assert.ok(relationships.some((rel) => rel.type === 'rival'), 'live relationship included');
-  assert.ok(!relationships.some((rel) => rel.type === 'exile'), 'archived relationship excluded');
+  assert.ok(relationships.some((rel) => rel.type === 'rival_of'), 'live connection included');
+  assert.ok(!relationships.some((rel) => rel.type === 'mentor_of'), 'archived connection excluded');
 });
 
 test('assets and entities referenced by contract-defined values ship in the package', async (t) => {

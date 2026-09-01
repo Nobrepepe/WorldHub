@@ -7,7 +7,8 @@ import { getState } from '../store.js';
 import { createNamedEntity } from './worlds.js';
 import {
   detailHeader, tabbedSections, baseFieldsSection, profileField, displayArtSection, resolveEntityArt,
-  documentsSection, assetsSection, relationshipsSection, usageSection, archiveControls,
+  documentsSection, assetsSection, connectionsSection, usageSection, archiveControls,
+  connectionSummaryLine,
 } from './detail-common.js';
 import { createAutosaver } from '../ui/autosave.js';
 import { pickEntity } from '../ui/entity-picker.js';
@@ -121,9 +122,11 @@ export async function renderCharacterDetail({ id }) {
   const host = el('div', {});
   host.append(detailHeader(entity, { eyebrow: entity.world ? `Character · ${entity.world.name}` : 'Character' }));
 
-  const overview = () => {
+  const overview = async () => {
     const container = el('div', { style: { maxWidth: '44rem' } });
     const { host: baseHost } = baseFieldsSection(entity, { onSaved: (updated) => { entity = updated; } });
+    const summary = await connectionSummaryLine(entity);
+    if (summary) container.append(summary);
 
     const aliasSaver = createAutosaver({
       save: async () => {
@@ -186,7 +189,7 @@ export async function renderCharacterDetail({ id }) {
     { label: 'Profile', render: profileTab },
     { label: 'Documents', render: () => documentsSection(entity) },
     { label: 'Assets', render: () => assetsSection(entity) },
-    { label: 'Relationships', render: () => relationshipsSection(entity) },
+    { label: 'Connections', render: () => connectionsSection(entity) },
     { label: 'Usage', render: () => usageSection(entity) },
   ]));
   return host;

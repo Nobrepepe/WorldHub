@@ -27,7 +27,7 @@ const NAV_GROUPS = [
       { path: '/entries', label: 'Entries', countKey: 'entries' },
       { path: '/documents', label: 'Documents', countKey: 'documents' },
       { path: '/assets', label: 'Assets', countKey: 'assets' },
-      { path: '/relationships', label: 'Relationships' },
+      { path: '/connections', label: 'Connections' },
     ],
   },
   {

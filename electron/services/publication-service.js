@@ -125,9 +125,12 @@ export function resolveSnapshot(library, productionId) {
     return { row, aliases, tags };
   }).sort((a, b) => a.row.id.localeCompare(b.row.id));
 
-  /* non-archived relationships fully inside the included set */
-  const relationships = db.prepare(`SELECT * FROM relationships WHERE status != 'archived' ORDER BY id`).all()
-    .filter((rel) => entityIds.has(rel.source_id) && entityIds.has(rel.target_id));
+  /* non-archived connections fully inside the included set */
+  const connections = db.prepare(`
+    SELECT c.*, k.category, k.forward_label, k.inverse_label
+    FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
+    WHERE c.status != 'archived' ORDER BY c.id
+  `).all().filter((row) => entityIds.has(row.source_id) && entityIds.has(row.target_id));
 
   /* documents by contract mode */
   const documentsMode = contract.documents?.mode ?? 'linked';
@@ -242,7 +245,7 @@ export function resolveSnapshot(library, productionId) {
     return { id: row.id, name: row.name, group: row.group_name };
   });
 
-  return { production, contract, entities, relationships, documents, assetItems, tags, documentsMode };
+  return { production, contract, entities, connections, documents, assetItems, tags, documentsMode };
 }
 
 /* ---------------- preview ---------------- */
@@ -364,7 +367,7 @@ export async function previewPublication(library, productionId) {
         assetId: item.asset.id, title: item.asset.title, versionId: item.version.id,
         setId: item.setId, recipes: item.recipes,
       })),
-      relationships: snapshot.relationships.length,
+      connections: snapshot.connections.length,
       documentsMode: snapshot.documentsMode,
       fileCount: files.length + snapshot.documents.length + 10,
     },
@@ -556,15 +559,19 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
     });
   writePackageFile('catalog/characters.json', stableJson(charactersJson));
 
-  writePackageFile('catalog/relationships.json', stableJson(snapshot.relationships.map((rel) => ({
-    id: rel.id,
-    sourceId: rel.source_id,
-    targetId: rel.target_id,
-    type: rel.rel_type,
-    label: rel.label,
-    inverseLabel: rel.inverse_label,
-    description: rel.description,
-    position: rel.position,
+  /* The published file keeps its Protocol 1 name and every field a consumer
+     already reads. `type`, `label` and `inverseLabel` are still populated —
+     resolved from the kind now rather than retyped per record — so a reader
+     vendored before connections existed sees exactly what it saw before. */
+  writePackageFile('catalog/relationships.json', stableJson(snapshot.connections.map((connection) => ({
+    id: connection.id,
+    sourceId: connection.source_id,
+    targetId: connection.target_id,
+    type: connection.kind_id,
+    label: connection.label_override || connection.forward_label,
+    inverseLabel: connection.inverse_label_override || connection.inverse_label,
+    description: connection.description,
+    position: connection.position,
   }))));
 
   writePackageFile('catalog/tags.json', stableJson(snapshot.tags));

@@ -7,7 +7,7 @@ import { navigate } from '../router.js';
 import { confirmOverlay } from '../ui/overlay.js';
 import { showToast } from '../ui/toast.js';
 import { getState } from '../store.js';
-import { openRelationshipEditor, relationshipRow } from './relationships.js';
+import { openConnectionEditor } from './connections.js';
 import { backLink } from '../ui/back-link.js';
 import { groupAssetsByRole, aspectForRecipe, ratioLabel, tileColumnRem, previewRecipeForRole } from '../ui/asset-roles.js';
 
@@ -326,33 +326,103 @@ function otherRolesLine(asset) {
   return [asset.kind, ...extra].join(' · ');
 }
 
-/** Relationship list + editor for one entity. */
-export async function relationshipsSection(entity) {
+/**
+ * One record's connections, written from its own side.
+ *
+ * Every section, its heading and the label each row wears come from the
+ * kinds themselves, so a group opens on its Members and a character on its
+ * People without this screen holding a list of headings per entity type.
+ */
+export async function connectionsSection(entity) {
   const host = el('div', { class: 'section' });
+  const readOnly = getState().library?.readOnly;
+
   const render = async () => {
     clear(host);
-    const relationships = await call('relationship.list', { entityId: entity.id });
-    if (relationships.length === 0) {
-      host.append(el('p', { class: 'empty-state' }, 'No relationships yet.'));
-    } else {
-      const list = el('ul', { class: 'row-list' });
-      for (const rel of relationships) {
-        list.append(relationshipRow(rel, { perspectiveId: entity.id, onChanged: render }));
-      }
-      host.append(list);
+    const sections = await call('connection.forEntity', { id: entity.id });
+    if (sections.length === 0) {
+      host.append(el('p', { class: 'empty-state' }, emptyStateFor(entity.type)));
     }
-    host.append(el('p', { style: { marginTop: '0.8rem' } },
-      el('button', {
-        class: 'btn',
-        onclick: async () => {
-          const created = await openRelationshipEditor({ sourceId: entity.id, sourceName: entity.name });
-          if (created) render();
+    for (const section of sections) {
+      const block = el('div', { class: 'section' }, el('span', { class: 'eyebrow' }, section.name));
+      const list = el('ul', { class: 'row-list' });
+      for (const item of section.items) {
+        list.append(el('li', {
+          class: 'row', tabindex: '0',
+          onclick: () => navigate(hrefForEntity(item.otherType, item.otherId)),
+          onkeydown: (e) => { if (e.key === 'Enter') navigate(hrefForEntity(item.otherType, item.otherId)); },
         },
-      }, 'Relate to another record →'),
-    ));
+          el('div', { class: 'row-main' },
+            el('div', { class: 'row-title' }, item.otherName),
+            el('div', { class: 'row-sub' }, [item.label, item.description].filter(Boolean).join(' · ')),
+          ),
+          !readOnly ? el('div', { class: 'row-side' },
+            el('button', {
+              class: 'btn btn-danger',
+              'aria-label': `Remove the connection to ${item.otherName}`,
+              onclick: async (e) => {
+                e.stopPropagation();
+                const confirmed = await confirmOverlay({
+                  title: 'Remove this connection?',
+                  body: item.sentence,
+                  guarantee: 'Only the connection goes. Both records are left exactly as they are.',
+                  confirmLabel: 'Remove the connection',
+                  danger: true,
+                });
+                if (confirmed) {
+                  await callSafe('connection.delete', { id: item.id });
+                  render();
+                }
+              },
+            }, 'Remove'),
+          ) : null,
+        ));
+      }
+      block.append(list);
+      host.append(block);
+    }
+    if (!readOnly) {
+      host.append(el('p', { style: { marginTop: '0.8rem' } },
+        el('button', {
+          class: 'btn',
+          onclick: async () => {
+            const created = await openConnectionEditor({ entity });
+            if (created) render();
+          },
+        }, 'Connect to another record →'),
+      ));
+    }
   };
   await render();
   return host;
+}
+
+function hrefForEntity(type, id) {
+  if (type === 'world') return `/world/${id}`;
+  if (type === 'character') return `/character/${id}`;
+  return `/entry/${id}`;
+}
+
+/** What this kind of record is usually connected to, said in its own terms. */
+function emptyStateFor(type) {
+  const guidance = {
+    world: 'Nothing is connected yet. A world holds its records through their own world field; connections are for the facts between them.',
+    character: 'Nothing is connected yet — name the people this character knows, the groups they belong to, and where they live.',
+    group: 'Nothing is connected yet. A group is mostly its members: add the people who belong to it and whoever leads it.',
+    location: 'Nothing is connected yet — add who lives here, which groups operate here, and what this place contains.',
+    species: 'Nothing is connected yet — add the characters who belong to this species and where it comes from.',
+    object: 'Nothing is connected yet — add who owns, wields or made this, and where it is kept.',
+    event: 'Nothing is connected yet — add who took part, where it happened, and which objects mattered.',
+    lore: 'Nothing is connected yet — name the records this lore is about.',
+  };
+  return guidance[type] ?? 'Nothing is connected yet.';
+}
+
+/** A computed one-line reading of what a record's connections amount to. */
+export async function connectionSummaryLine(entity) {
+  const summary = await callSafe('connection.summary', { id: entity.id });
+  if (!summary || summary.total === 0) return null;
+  return el('p', { class: 'meta-line' }, summary.line);
 }
 
 /** Usage: everything that references this entity. */
@@ -374,8 +444,8 @@ export async function usageSection(entity) {
 
   host.append(
     block('Documents', usage.documents, (doc) => linkRow(doc.title, doc.status, `/document/${doc.id}`)),
-    block('Relationships', usage.relationships, (rel) =>
-      linkRow(`${rel.source_name} — ${rel.label || rel.rel_type} — ${rel.target_name}`, rel.rel_type, '/relationships')),
+    block('Connections', usage.connections, (connection) =>
+      linkRow(`${connection.sourceName} — ${connection.label} — ${connection.targetName}`, connection.kindId, '/connections')),
     block('Assets', usage.assets, (asset) => linkRow(asset.title, asset.role, `/asset/${asset.id}`)),
     block('Productions', usage.productions, (production) => linkRow(production.name, production.status, `/production/${production.id}`)),
   );
@@ -408,12 +478,12 @@ export function archiveControls(entity, { onChanged }) {
       class: 'btn btn-danger',
       onclick: async () => {
         const usage = await call('entity.usage', { id: entity.id });
-        const affected = usage.documents.length + usage.relationships.length + usage.assets.length + usage.productions.length + usage.children.length;
+        const affected = usage.documents.length + usage.connections.length + usage.assets.length + usage.productions.length + usage.children.length;
         const confirmed = await confirmOverlay({
           title: `Archive ${entity.name}?`,
           body: affected === 0
             ? 'Nothing references this record.'
-            : `This record is referenced by ${usage.documents.length} document(s), ${usage.relationships.length} relationship(s), ${usage.assets.length} asset link(s), ${usage.productions.length} production(s), and ${usage.children.length} member record(s). They keep their links.`,
+            : `This record is referenced by ${usage.documents.length} document(s), ${usage.connections.length} connection(s), ${usage.assets.length} asset link(s), ${usage.productions.length} production(s), and ${usage.children.length} member record(s). They keep their links.`,
           guarantee: 'Nothing is deleted. Archived records stay in old publications and can be restored at any time.',
           confirmLabel: 'Archive this record',
           danger: true,

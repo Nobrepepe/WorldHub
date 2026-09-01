@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
 import { createContract } from '../../electron/services/contract-service.js';
-import { createEntity, updateEntity, createRelationship } from '../../electron/services/entity-service.js';
+import { createEntity, updateEntity } from '../../electron/services/entity-service.js';
+import { createConnection } from '../../electron/services/connection-service.js';
 import { importAsset, setAssetLinks, addAssetVersion } from '../../electron/services/asset-service.js';
 import { createDocument } from '../../electron/services/document-service.js';
 import {
@@ -128,9 +129,7 @@ export async function buildCanon(library, { variant = 1 } = {}) {
   }
   const place = createEntity(library, { type: 'location', name: 'The Star Cage', worldId: world.id });
   updateEntity(library, place.id, { status: 'canonical', summary: 'The lattice holding the captive star.' });
-  createRelationship(library, {
-    sourceId: heroes[0].id, targetId: place.id, relType: 'guardian', label: 'guards', inverseLabel: 'guarded by',
-  });
+  createConnection(library, { kindId: 'based_at', entityId: heroes[0].id, counterpartId: place.id });
   const lore = createDocument(library, {
     title: 'The Emberfall Accord',
     entityIds: [world.id, heroes[0].id],

@@ -8,7 +8,7 @@ import { textInput } from '../ui/forms.js';
 import { getState } from '../store.js';
 import {
   detailHeader, tabbedSections, baseFieldsSection, profileField, displayArtSection, resolveEntityArt,
-  documentsSection, assetsSection, relationshipsSection, usageSection, archiveControls,
+  documentsSection, assetsSection, connectionsSection, usageSection, archiveControls,
 } from './detail-common.js';
 import { createAutosaver } from '../ui/autosave.js';
 
@@ -157,7 +157,7 @@ export async function renderWorldDetail({ id }) {
     { label: 'Entries', render: () => membersSection(entity, 'entry') },
     { label: 'Documents', render: () => documentsSection(entity) },
     { label: 'Assets', render: () => assetsSection(entity) },
-    { label: 'Relationships', render: () => relationshipsSection(entity) },
+    { label: 'Connections', render: () => connectionsSection(entity) },
     { label: 'Usage', render: () => usageSection(entity) },
   ]));
   return host;

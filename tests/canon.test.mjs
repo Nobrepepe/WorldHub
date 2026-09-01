@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { makeTestLibrary } from './helpers.mjs';
 import {
   createEntity, getEntity, updateEntity, listEntities, entityUsage, archiveEntity, restoreEntity,
-  createRelationship, updateRelationship, listRelationships,
   ensureTag, setSubjectTags, tagsFor, listTags,
 } from '../electron/services/entity-service.js';
+import {
+  createConnection, updateConnection, listConnections, connectionsForEntity,
+} from '../electron/services/connection-service.js';
 import { searchLibrary, rebuildSearchIndex } from '../electron/services/search-service.js';
 
 test('entity UUID stays stable through rename and slug stays editable', async (t) => {
@@ -60,29 +62,69 @@ test('worlds and characters associate; profiles persist', async (t) => {
   assert.deepEqual(chars.map((c) => c.name), ['Nao']);
 });
 
-test('relationships keep direction and inverse label', async (t) => {
+test('a connection takes its labels and its direction from its kind', async (t) => {
   const { library, cleanup } = await makeTestLibrary();
   t.after(cleanup);
 
   const a = createEntity(library, { type: 'character', name: 'Ari' });
   const b = createEntity(library, { type: 'character', name: 'Bram' });
-  const rel = createRelationship(library, {
-    sourceId: a.id, targetId: b.id, relType: 'mentor',
-    label: 'mentor of', inverseLabel: 'student of', description: 'Since the flood year.',
+  const connection = createConnection(library, {
+    kindId: 'mentor_of', entityId: a.id, counterpartId: b.id,
+    description: 'Since the flood year.',
   });
-  assert.equal(rel.sourceId, a.id);
-  assert.equal(rel.targetId, b.id);
-  assert.equal(rel.inverseLabel, 'student of');
+  assert.equal(connection.sourceId, a.id);
+  assert.equal(connection.targetId, b.id);
+  assert.equal(connection.label, 'Mentor');
+  assert.equal(connection.inverseLabel, 'Student');
+  assert.equal(connection.sentence, 'Ari is the mentor of Bram.');
 
-  const updated = updateRelationship(library, rel.id, { description: 'Since the flood year, uneasily.' });
+  const updated = updateConnection(library, connection.id, { description: 'Since the flood year, uneasily.' });
   assert.match(updated.description, /uneasily/);
 
-  const forA = listRelationships(library, { entityId: a.id });
+  const forA = listConnections(library, { entityId: a.id });
   assert.equal(forA.length, 1);
   assert.equal(forA[0].sourceName, 'Ari');
   assert.equal(forA[0].targetName, 'Bram');
 
-  assert.throws(() => createRelationship(library, { sourceId: a.id, targetId: a.id, relType: 'twin' }), /cannot relate to itself/);
+  /* Each side reads the same fact in its own words, under its own heading. */
+  const [ariSection] = connectionsForEntity(library, a.id);
+  assert.equal(ariSection.items[0].label, 'Mentor');
+  assert.equal(ariSection.items[0].otherName, 'Bram');
+  const [bramSection] = connectionsForEntity(library, b.id);
+  assert.equal(bramSection.items[0].label, 'Student');
+  assert.equal(bramSection.items[0].otherName, 'Ari');
+
+  assert.throws(() => createConnection(library, { kindId: 'mentor_of', entityId: a.id, counterpartId: a.id }),
+    /cannot connect to itself/);
+});
+
+test('a kind decides which records it can join, and the same fact files once', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+
+  const world = createEntity(library, { type: 'world', name: 'Vel' });
+  const nao = createEntity(library, { type: 'character', name: 'Nao', worldId: world.id });
+  const wardens = createEntity(library, { type: 'group', name: 'Kozuki Wardens', worldId: world.id });
+  const relic = createEntity(library, { type: 'object', name: 'The Star Cage', worldId: world.id });
+
+  /* Membership of an object is not a fact this vocabulary can state. */
+  assert.throws(
+    () => createConnection(library, { kindId: 'member_of', entityId: nao.id, counterpartId: relic.id }),
+    /does not join a character to an object/);
+
+  createConnection(library, { kindId: 'member_of', entityId: nao.id, counterpartId: wardens.id });
+
+  /* Filed again from the group's page: the same canonical row, not a second. */
+  assert.throws(
+    () => createConnection(library, { kindId: 'member_of', entityId: wardens.id, counterpartId: nao.id }),
+    /already connected that way/);
+  assert.equal(listConnections(library, { kindId: 'member_of' }).length, 1);
+
+  const [naoSection] = connectionsForEntity(library, nao.id);
+  assert.equal(naoSection.name, 'Affiliations');
+  const [groupSection] = connectionsForEntity(library, wardens.id);
+  assert.equal(groupSection.name, 'Members');
+  assert.equal(groupSection.items[0].otherName, 'Nao');
 });
 
 test('tags apply to entities and are reusable', async (t) => {
@@ -112,11 +154,12 @@ test('archive shows usage first and archived entities can be restored', async (t
 
   const world = createEntity(library, { type: 'world', name: 'Vel' });
   const nao = createEntity(library, { type: 'character', name: 'Nao', worldId: world.id });
-  createRelationship(library, { sourceId: nao.id, targetId: world.id, relType: 'born in' });
+  const lore = createEntity(library, { type: 'lore', name: 'The Vel Accord', worldId: world.id });
+  createConnection(library, { kindId: 'concerns', entityId: lore.id, counterpartId: nao.id });
 
   const usage = entityUsage(library, world.id);
-  assert.equal(usage.children.length, 1);
-  assert.equal(usage.relationships.length, 1);
+  assert.equal(usage.children.length, 2);
+  assert.equal(entityUsage(library, nao.id).connections.length, 1);
 
   archiveEntity(library, world.id);
   assert.equal(getEntity(library, world.id).status, 'archived');

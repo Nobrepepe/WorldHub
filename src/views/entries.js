@@ -6,7 +6,8 @@ import { getState } from '../store.js';
 import { createEntryFlow } from './worlds.js';
 import {
   detailHeader, tabbedSections, baseFieldsSection,
-  documentsSection, assetsSection, relationshipsSection, usageSection, archiveControls,
+  documentsSection, assetsSection, connectionsSection, usageSection, archiveControls,
+  connectionSummaryLine,
 } from './detail-common.js';
 
 const ENTRY_TYPES = ['location', 'group', 'species', 'object', 'event', 'lore'];
@@ -100,9 +101,14 @@ export async function renderEntryDetail({ id }) {
   const eyebrow = [entity.type, entity.world?.name].filter(Boolean).join(' · ');
   host.append(detailHeader(entity, { eyebrow }));
 
-  const overview = () => {
+  const overview = async () => {
     const container = el('div', { style: { maxWidth: '44rem' } });
     const { host: baseHost } = baseFieldsSection(entity, { onSaved: (updated) => { entity = updated; } });
+    /* An entry is mostly what it is connected to, so what it is connected to
+       is said at the top — counted from the connections themselves rather
+       than written into the summary, where it would go stale unnoticed. */
+    const summary = await connectionSummaryLine(entity);
+    if (summary) container.append(summary);
     container.append(
       baseHost,
       archiveControls(entity, { onChanged: () => navigate(`/entry/${entity.id}`) }),
@@ -114,7 +120,7 @@ export async function renderEntryDetail({ id }) {
     { label: 'Overview', render: overview },
     { label: 'Documents', render: () => documentsSection(entity) },
     { label: 'Assets', render: () => assetsSection(entity) },
-    { label: 'Relationships', render: () => relationshipsSection(entity) },
+    { label: 'Connections', render: () => connectionsSection(entity) },
     { label: 'Usage', render: () => usageSection(entity) },
   ]));
   return host;
