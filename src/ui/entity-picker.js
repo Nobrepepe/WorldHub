@@ -8,6 +8,7 @@ import { openOverlay } from './overlay.js';
  */
 export function pickEntity({
   title = 'Choose a record', types = null, worldId = null, excludeIds = [], worldCharacterFilter = false,
+  preferWorldId = null,
 } = {}) {
   const { promise } = openOverlay((close) => {
     const results = el('ul', { class: 'row-list', role: 'listbox', 'aria-label': 'Matching records' });
@@ -45,6 +46,17 @@ export function pickEntity({
       results.children[active]?.scrollIntoView({ block: 'nearest' });
     };
 
+    /* Most facts join records that share a world, so those are offered first
+       and the rest are a deliberate step away — never hidden, because canon
+       does cross worlds and a picker that pretended otherwise would make the
+       crossing impossible rather than merely uncommon. */
+    let everyWorld = !preferWorldId;
+    const scopeNote = el('span', { class: 'quiet' }, '');
+    const scopeToggle = el('button', {
+      class: 'btn', type: 'button', hidden: !preferWorldId,
+      onclick: () => { everyWorld = !everyWorld; load(input.value); },
+    }, 'Search every world');
+
     const load = async (query) => {
       const list = await call('entity.list', {
         types: types ?? undefined,
@@ -54,7 +66,17 @@ export function pickEntity({
         limit: 2000,
       });
       const q = query.trim().toLowerCase();
-      renderResults(q ? list.filter((item) => item.name.toLowerCase().includes(q) || item.slug.includes(q)) : list);
+      const matching = q
+        ? list.filter((item) => item.name.toLowerCase().includes(q) || item.slug.includes(q))
+        : list;
+      if (!preferWorldId) { renderResults(matching); return; }
+      const sameWorld = matching.filter((item) => item.worldId === preferWorldId || item.id === preferWorldId);
+      scopeToggle.textContent = everyWorld ? 'This world only' : 'Search every world';
+      const elsewhere = matching.length - sameWorld.length;
+      scopeNote.textContent = everyWorld
+        ? 'Every world'
+        : elsewhere > 0 ? `This world · ${elsewhere} more elsewhere` : 'This world';
+      renderResults(everyWorld ? [...sameWorld, ...matching.filter((item) => !sameWorld.includes(item))] : sameWorld);
     };
     const debouncedLoad = debounce(load, 150);
 
@@ -76,6 +98,10 @@ export function pickEntity({
       worldCharacterFilter ? worldCharacterFields(close, excludeIds) : null,
       worldCharacterFilter ? el('span', { class: 'eyebrow' }, 'Or search every record') : null,
       el('div', { class: 'field' }, input),
+      preferWorldId
+        ? el('div', { style: { display: 'flex', gap: '0.9rem', alignItems: 'baseline', margin: '0.2rem 0 0.4rem' } },
+          scopeNote, scopeToggle)
+        : null,
       el('div', { style: { maxHeight: '18rem', overflowY: 'auto' } }, results),
       el('div', { class: 'overlay-actions' },
         el('button', { class: 'btn', onclick: () => close(undefined) }, 'Cancel'),

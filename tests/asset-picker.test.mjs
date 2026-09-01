@@ -1,81 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { installDom } from './dom-stub.mjs';
 
 /**
- * The bulk asset picker is renderer code, so it runs here against a
- * DOM stub small enough to read in one sitting — the same approach the
- * router test takes.
+ * The bulk asset picker is renderer code, so it runs here against the shared
+ * DOM stub — the same approach the router test takes.
  */
-
-class StubNode {
-  constructor(tag) {
-    this.tagName = tag.toUpperCase();
-    this.children = [];
-    this.attributes = {};
-    this.dataset = {};
-    this.style = {};
-    this.listeners = new Map();
-    this.className = '';
-    this.textContent = '';
-    this.classList = {
-      toggle: (name, on) => {
-        const names = new Set(this.className.split(' ').filter(Boolean));
-        if (on) names.add(name); else names.delete(name);
-        this.className = [...names].join(' ');
-      },
-      contains: (name) => this.className.split(' ').includes(name),
-    };
-  }
-
-  get firstChild() { return this.children[0] ?? null; }
-  removeChild(child) { this.children = this.children.filter((item) => item !== child); }
-  append(...nodes) { this.children.push(...nodes); }
-  replaceWith() {}
-  remove() {}
-  setAttribute(name, value) { this.attributes[name] = value; }
-  getAttribute(name) { return this.attributes[name]; }
-  focus() {}
-  addEventListener(name, handler) { this.listeners.set(name, handler); }
-  fire(name, event = {}) { this.listeners.get(name)?.({ stopPropagation() {}, preventDefault() {}, ...event }); }
-
-  descendants() {
-    return this.children.flatMap((child) => (child instanceof StubNode ? [child, ...child.descendants()] : []));
-  }
-
-  querySelector(selector) {
-    if (selector === 'input[type="checkbox"]') {
-      return this.descendants().find((node) => node.tagName === 'INPUT' && node.type === 'checkbox') ?? null;
-    }
-    // The only other selector the picker path uses is the overlay's
-    // "first focusable" lookup.
-    const tags = selector.split(',').map((part) => part.trim().split(/[[:]/)[0].toUpperCase());
-    return this.descendants().find((node) => tags.includes(node.tagName)) ?? null;
-  }
-
-  /** Test-side helpers. */
-  findAll(predicate) { return this.descendants().filter(predicate); }
-  findButton(text) { return this.descendants().find((node) => node.tagName === 'BUTTON' && renderedText(node).includes(text)); }
-}
-
-function renderedText(node) {
-  if (typeof node === 'string') return node;
-  if (!(node instanceof StubNode)) return '';
-  return (node.textContent ?? '') + node.children.map(renderedText).join('');
-}
-
-function installDom() {
-  const overlays = new StubNode('div');
-  globalThis.Node = StubNode;
-  globalThis.document = {
-    createElement: (tag) => new StubNode(tag),
-    createTextNode: (text) => text,
-    getElementById: (id) => (id === 'overlays' ? overlays : null),
-    activeElement: null,
-    body: new StubNode('body'),
-    addEventListener() {},
-  };
-  return overlays;
-}
 
 function installAssets(assets) {
   globalThis.window = {

@@ -7,7 +7,7 @@ import { navigate } from '../router.js';
 import { confirmOverlay } from '../ui/overlay.js';
 import { showToast } from '../ui/toast.js';
 import { getState } from '../store.js';
-import { openConnectionEditor } from './connections.js';
+import { openConnectionDrawer } from './connections.js';
 import { backLink } from '../ui/back-link.js';
 import { groupAssetsByRole, aspectForRecipe, ratioLabel, tileColumnRem, previewRecipeForRole } from '../ui/asset-roles.js';
 
@@ -329,9 +329,10 @@ function otherRolesLine(asset) {
 /**
  * One record's connections, written from its own side.
  *
- * Every section, its heading and the label each row wears come from the
- * kinds themselves, so a group opens on its Members and a character on its
- * People without this screen holding a list of headings per entity type.
+ * Every section, its heading, the label each row wears and the action that
+ * adds to it come from the kinds themselves — so a group opens on its
+ * Members and offers to add one, and a character opens on its People, with
+ * no screen holding a list of headings per entity type.
  */
 export async function connectionsSection(entity) {
   const host = el('div', { class: 'section' });
@@ -339,55 +340,47 @@ export async function connectionsSection(entity) {
 
   const render = async () => {
     clear(host);
-    const sections = await call('connection.forEntity', { id: entity.id });
+    const [sections, offered] = await Promise.all([
+      call('connection.forEntity', { id: entity.id }),
+      call('connection.kindsForType', { entityType: entity.type, includeLegacy: true }),
+    ]);
+
     if (sections.length === 0) {
       host.append(el('p', { class: 'empty-state' }, emptyStateFor(entity.type)));
     }
+
     for (const section of sections) {
       const block = el('div', { class: 'section' }, el('span', { class: 'eyebrow' }, section.name));
       const list = el('ul', { class: 'row-list' });
-      for (const item of section.items) {
-        list.append(el('li', {
-          class: 'row', tabindex: '0',
-          onclick: () => navigate(hrefForEntity(item.otherType, item.otherId)),
-          onkeydown: (e) => { if (e.key === 'Enter') navigate(hrefForEntity(item.otherType, item.otherId)); },
-        },
-          el('div', { class: 'row-main' },
-            el('div', { class: 'row-title' }, item.otherName),
-            el('div', { class: 'row-sub' }, [item.label, item.description].filter(Boolean).join(' · ')),
-          ),
-          !readOnly ? el('div', { class: 'row-side' },
-            el('button', {
-              class: 'btn btn-danger',
-              'aria-label': `Remove the connection to ${item.otherName}`,
-              onclick: async (e) => {
-                e.stopPropagation();
-                const confirmed = await confirmOverlay({
-                  title: 'Remove this connection?',
-                  body: item.sentence,
-                  guarantee: 'Only the connection goes. Both records are left exactly as they are.',
-                  confirmLabel: 'Remove the connection',
-                  danger: true,
-                });
-                if (confirmed) {
-                  await callSafe('connection.delete', { id: item.id });
-                  render();
-                }
-              },
-            }, 'Remove'),
-          ) : null,
+      for (const item of section.items) list.append(connectionItemRow(entity, item, render, readOnly));
+      block.append(list);
+
+      /* The offer belongs where the reader already is: under Members, the
+         thing to add is a member. Which kinds those are is read from the
+         same definitions that named the heading. */
+      const sectionKinds = offered.filter((kind) => kind.section === section.name);
+      if (!readOnly && sectionKinds.length > 0) {
+        block.append(el('p', { style: { marginTop: '0.5rem' } },
+          el('button', {
+            class: 'btn',
+            onclick: async () => {
+              const added = await openConnectionDrawer({
+                entity, presetKinds: sectionKinds.map((kind) => kind.id),
+              });
+              if (added) render();
+            },
+          }, addLabel(section, sectionKinds)),
         ));
       }
-      block.append(list);
       host.append(block);
     }
+
     if (!readOnly) {
-      host.append(el('p', { style: { marginTop: '0.8rem' } },
+      host.append(el('p', { style: { marginTop: '1.2rem' } },
         el('button', {
           class: 'btn',
           onclick: async () => {
-            const created = await openConnectionEditor({ entity });
-            if (created) render();
+            if (await openConnectionDrawer({ entity })) render();
           },
         }, 'Connect to another record →'),
       ));
@@ -395,6 +388,59 @@ export async function connectionsSection(entity) {
   };
   await render();
   return host;
+}
+
+function connectionItemRow(entity, item, render, readOnly) {
+  const href = hrefForEntity(item.otherType, item.otherId);
+  return el('li', {
+    class: 'row', tabindex: '0',
+    onclick: () => navigate(href),
+    onkeydown: (e) => { if (e.key === 'Enter') navigate(href); },
+  },
+    el('div', { class: 'row-main' },
+      el('div', { class: 'row-title' }, item.otherName),
+      el('div', { class: 'row-sub' },
+        [item.label, item.legacy ? 'carried over' : null, item.description].filter(Boolean).join(' · ')),
+    ),
+    !readOnly ? el('div', { class: 'row-side' },
+      el('button', {
+        class: 'btn',
+        'aria-label': `Edit the connection to ${item.otherName}`,
+        onclick: async (e) => {
+          e.stopPropagation();
+          if (await openConnectionDrawer({ entity, existing: item })) render();
+        },
+      }, 'Edit'),
+      ' ',
+      el('button', {
+        class: 'btn btn-danger',
+        'aria-label': `Remove the connection to ${item.otherName}`,
+        onclick: async (e) => {
+          e.stopPropagation();
+          const confirmed = await confirmOverlay({
+            title: 'Remove this connection?',
+            body: item.sentence,
+            guarantee: 'Only the connection goes. Both records are left exactly as they are.',
+            confirmLabel: 'Remove the connection',
+            danger: true,
+          });
+          if (confirmed) {
+            await callSafe('connection.delete', { id: item.id });
+            render();
+          }
+        },
+      }, 'Remove'),
+    ) : null,
+  );
+}
+
+/** "Add a member →" when the heading means one thing, "Add to …" when several. */
+function addLabel(section, kinds) {
+  if (kinds.length === 1) {
+    const noun = kinds[0].label.toLowerCase();
+    return `Add ${'aeiou'.includes(noun[0]) ? 'an' : 'a'} ${noun} →`;
+  }
+  return `Add to ${section.name.toLowerCase()} →`;
 }
 
 function hrefForEntity(type, id) {

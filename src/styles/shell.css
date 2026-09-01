@@ -211,6 +211,70 @@
 }
 .overlay.overlay-wide { width: min(64rem, calc(100vw - 3rem)); }
 .overlay h2 { margin-bottom: 0.9rem; }
+
+/* A working drawer rather than a dialog over the middle of the screen: the
+   record being connected stays where it was, on the left, while the fact is
+   assembled beside it. Same layer, same focus trap, same Escape. */
+.overlay-backdrop.drawer-backdrop { place-items: stretch; justify-content: end; }
+.overlay.overlay-drawer {
+  width: min(29rem, calc(100vw - 2rem));
+  max-height: none;
+  height: 100vh;
+  border-top: 0;
+  border-left: 1px solid var(--line);
+  padding: 1.6rem 1.8rem 2rem;
+  animation: drawer-in calc(180ms * var(--motion, 1)) ease;
+}
+@keyframes drawer-in {
+  from { transform: translateX(1.5rem); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* Below the tablet break the side of the window is not somewhere a hand
+   reaches, so the drawer comes up from the bottom instead. */
+@media (max-width: 767px) {
+  .overlay-backdrop.drawer-backdrop { place-items: end stretch; }
+  .overlay.overlay-drawer {
+    width: 100%;
+    height: auto;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    animation: drawer-up calc(180ms * var(--motion, 1)) ease;
+  }
+  @keyframes drawer-up {
+    from { transform: translateY(1.5rem); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+}
+
+/* The sentence the drawer is about to file, given the room to be read. */
+.fact-line {
+  font-family: var(--serif);
+  font-size: calc(1.05rem * var(--text-scale));
+  line-height: 1.45;
+  color: var(--text);
+  margin-top: 0.4rem;
+  min-height: 2.9rem;
+}
+.fact-line.pending { color: var(--muted-2); }
+
+/* Kinds offered as text, not as chips — grouping is spacing and an eyebrow. */
+.kind-choices { display: flex; flex-direction: column; gap: 0.1rem; margin-top: 0.3rem; }
+.kind-choice {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 0.42rem 0;
+  font: inherit;
+  cursor: pointer;
+}
+.kind-choice:hover { color: var(--text); }
+.kind-choice[aria-pressed="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.kind-choice .kind-note { color: var(--faint); margin-left: 0.5rem; font-size: calc(0.82rem * var(--text-scale)); }
 .overlay-actions {
   display: flex;
   gap: 1.8rem;

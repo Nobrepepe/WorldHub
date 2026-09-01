@@ -573,11 +573,19 @@ const kindRank = (kindId) => KIND_RANK.get(kindId) ?? Number.MAX_SAFE_INTEGER;
  * "Places within", "Organizations present", "Allied groups" — so that is the
  * word to turn. Words that merely end in s do not; "Species" is not a plural
  * of "Specie" and saying so in a summary line would be worse than saying
- * nothing.
+ * nothing. English keeps a few that carry no s at all, and those are listed.
  */
 const NOT_PLURAL = new Set(['species', 'lore', 'this']);
+const IRREGULAR = new Map([['people', 'person']]);
 function singularise(section) {
   const words = section.split(' ');
+  for (let i = 0; i < words.length; i++) {
+    const irregular = IRREGULAR.get(words[i].toLowerCase());
+    if (irregular) {
+      words[i] = irregular;
+      return words.join(' ');
+    }
+  }
   for (let i = 0; i < words.length; i++) {
     const word = words[i].toLowerCase();
     if (word.endsWith('s') && !word.endsWith('ss') && !NOT_PLURAL.has(word)) {
