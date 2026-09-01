@@ -136,8 +136,13 @@ export function openConnectionDrawer({ entity, presetKinds = null, existing = nu
        character calls an Affiliation, a group calls its Members, and both
        readings come from the one definition. */
     const loadKinds = async (selectKindId = null) => {
+      /* Kinds an upgrade carried over are not offered for a fact filed from
+         scratch — nobody should choose one deliberately. They are offered
+         when the caller has already named them: editing a connection filed
+         under one, or adding to a section built out of them. */
+      const includeLegacy = Boolean(existing) || Boolean(presetKinds);
       const [available, categories] = await Promise.all([
-        call('connection.kindsForType', { entityType: entity.type, includeLegacy: Boolean(existing) }),
+        call('connection.kindsForType', { entityType: entity.type, includeLegacy }),
         call('connection.categories'),
       ]);
       kinds = presetKinds ? available.filter((kind) => presetKinds.includes(kind.id)) : available;

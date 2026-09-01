@@ -215,7 +215,17 @@ function contextSensitiveNew() {
 
 export { refreshCounts, applyLibrarySettings };
 
-boot().catch((err) => {
-  console.error(err);
-  showToast('World Hub could not start. The details were logged to the console.', 'error');
-});
+/**
+ * Start the application.
+ *
+ * Called by `main.js`, the module `index.html` actually loads, rather than
+ * running as a side effect of importing this file. Four view modules import
+ * `refreshCounts` from here, so a bare import used to boot the whole shell —
+ * which meant nothing could read the route table without starting the app.
+ */
+export function start() {
+  boot().catch((err) => {
+    console.error(err);
+    showToast('World Hub could not start. The details were logged to the console.', 'error');
+  });
+}

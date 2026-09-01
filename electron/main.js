@@ -225,6 +225,8 @@ async function runChooserSmoke(win) {
       await assertPage('/home', 'The archive is empty', 'Create a world');
       await assertPage('/worlds', 'Worlds', 'Create a world');
       await assertPage('/characters', 'Characters', 'Create a character');
+      await assertPage('/entries', 'Entries', 'Create an entry');
+      await assertPage('/connections', 'Connections', 'Define a kind of connection');
       await assertPage('/inbox', 'Inbox', 'Bring a folder');
       await assertPage('/documents', 'Documents', 'Write a new document');
       await assertPage('/assets', 'Assets', 'Import files');

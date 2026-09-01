@@ -246,3 +246,61 @@ test('a kind this setting needs is defined without leaving the record being conn
   assert.equal(stored.length, 1);
   assert.equal(connections.connectionsForEntity(s.library, s.wardens.id)[0].name, 'Sworn swords');
 });
+
+test('the Connections screen answers to its own name, and to the old one', async (t) => {
+  const s = await scene(t);
+  const { registerAllViews } = await import('../src/views/index.js');
+  const router = await import('../src/router.js');
+  registerAllViews();
+
+  const connections = router.matchRoute('/connections');
+  assert.ok(connections, 'the screen has a route of its own');
+
+  /* Links written before the rename — a bookmark, a search result recorded
+     in an older library — still land on something real rather than on the
+     home screen with no explanation. */
+  const old = router.matchRoute('/relationships');
+  assert.ok(old, '/relationships still resolves');
+  assert.equal(old.route.view, connections.route.view, 'and lands on the same screen');
+
+  /* A detail screen reached cold knows which section a connection belongs to. */
+  assert.deepEqual(router.backDestination('/connections'), { path: '/home', title: 'Home' });
+  void s;
+});
+
+test('a section built from kinds an upgrade carried over can still be added to', async (t) => {
+  const s = await scene(t);
+  const overlays = installDom();
+  installBridge(s.library);
+
+  /* Exactly what migration 012 leaves behind: a kind nobody would choose for
+     a new fact, but which existing facts are filed under. */
+  s.library.db.prepare(`
+    INSERT INTO connection_kinds (id, category, forward_label, inverse_label, forward_section,
+                                  inverse_section, sentence, symmetric, is_builtin, is_legacy,
+                                  created_at, updated_at)
+    VALUES ('legacy_guards', 'legacy', 'guards', 'guarded by', 'Other connections',
+            'Other connections', '', 0, 0, 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+  `).run();
+  s.library.db.prepare(
+    'INSERT INTO connection_kind_pairs (kind_id, source_type, target_type) VALUES (?, ?, ?)')
+    .run('legacy_guards', 'character', 'location');
+  connections.createConnection(s.library, {
+    kindId: 'legacy_guards', entityId: s.nao.id, counterpartId: s.shrine.id,
+  });
+
+  const { connectionsSection } = await import('../src/views/detail-common.js');
+  const section = await connectionsSection(s.nao);
+  const add = section.findButton('Add a guards →');
+  assert.ok(add, 'the section offers to add another of what it already holds');
+
+  add.fire('click');
+  await settle();
+  const drawer = overlays.children.at(-1).children[0];
+  const kinds = drawer.findAll((node) => node.dataset?.kindId).map((node) => node.dataset.kindId);
+  assert.deepEqual(kinds, ['legacy_guards'],
+    'and the drawer really offers it, rather than opening on nothing');
+  assert.equal(drawer.findButton('Choose a location').disabled, false);
+
+  drawer.findButton('Cancel').fire('click');
+});

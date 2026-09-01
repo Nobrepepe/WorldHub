@@ -190,6 +190,57 @@ test('packages are self-contained: actual roles, no dangling profile or document
   assert.ok(!relationships.some((rel) => rel.type === 'mentor_of'), 'archived connection excluded');
 });
 
+test('a package carries the meaning of every connection in it, and nothing it did not select', async (t) => {
+  const { library, root, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const { production, world, nao, bram } = await readyGallery(library);
+  const { createConnection, createConnectionKind } = await import('../electron/services/connection-service.js');
+
+  /* A kind this setting invented, used between two records the gallery
+     includes; and a record it does not include, on the far end of another
+     connection of the same kind. */
+  const kind = createConnectionKind(library, {
+    category: 'social', forwardLabel: 'Sworn rival', inverseLabel: 'Sworn rival', symmetric: true,
+    sentence: '{source} and {target} are sworn rivals.',
+    pairs: [{ sourceType: 'character', targetType: 'character' }],
+  });
+  const outsider = createEntity(library, { type: 'character', name: 'Outsider', worldId: world.id });
+  createConnection(library, { kindId: kind.id, entityId: nao.id, counterpartId: bram.id });
+  createConnection(library, { kindId: kind.id, entityId: nao.id, counterpartId: outsider.id });
+
+  const publication = await publishProduction(library, production.id);
+  const packageDir = path.join(root, ...publication.directory.split('/'));
+  const read = (rel) => JSON.parse(fs.readFileSync(path.join(packageDir, ...rel.split('/')), 'utf8'));
+
+  const entityIds = new Set(read('catalog/entities.json').map((entity) => entity.id));
+  assert.equal(entityIds.has(outsider.id), false,
+    'a connection does not drag its far end into a package nobody selected it for');
+
+  const connections = read('catalog/relationships.json');
+  const sworn = connections.filter((connection) => connection.kindId === kind.id);
+  assert.equal(sworn.length, 1, 'only the connection whose both ends ship is carried');
+  assert.equal(sworn[0].type, kind.id, 'the Protocol 1 field still names the same thing');
+  assert.equal(sworn[0].label, 'Sworn rival', 'resolved from the kind, not retyped per record');
+  assert.equal(sworn[0].category, 'social');
+
+  /* Self-containment is about meaning as much as bytes: a custom kind
+     travels with its definition, so a consumer never hard-codes it. */
+  const kinds = read('catalog/connection-kinds.json');
+  const published = kinds.find((entry) => entry.id === kind.id);
+  assert.ok(published, 'the custom kind ships');
+  assert.equal(published.builtin, false);
+  assert.equal(published.symmetric, true);
+  assert.deepEqual(published.pairs, [['character', 'character']]);
+  for (const connection of connections) {
+    assert.ok(kinds.some((entry) => entry.id === connection.kindId),
+      'every packaged connection names a kind the package defines');
+  }
+
+  const manifest = read('manifest.json');
+  assert.equal(manifest.counts.connections, connections.length);
+  assert.equal(manifest.counts.connectionKinds, kinds.length);
+});
+
 test('assets and entities referenced by contract-defined values ship in the package', async (t) => {
   const { library, root, cleanup } = await makeTestLibrary();
   t.after(cleanup);

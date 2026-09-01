@@ -31,7 +31,8 @@ Domain rules live in `electron/services/`, not in click handlers:
 | `lock-service` | session-token write lock, stale detection, recovery |
 | `database-service` | SQLite open, pragmas (WAL, foreign keys), health checks |
 | `migration-service` | numbered transactional migrations in `migrations/` |
-| `entity-service` | entities, profiles, aliases, relationships, tags |
+| `entity-service` | entities, profiles, aliases, tags |
+| `connection-service` | connection kinds, endpoint compatibility, perspective-aware connections |
 | `document-service` | Markdown files, atomic saves, conflicts, links |
 | `asset-service` | blobs, versions, roles, crops, renditions, media URLs |
 | `inbox-service` | non-destructive bulk import and triage |
@@ -50,7 +51,7 @@ SQLite via better-sqlite3, WAL mode, foreign keys on, multi-record changes in tr
 
 Concept groups (see the migration files for exact columns):
 
-- **Canon** — `entities` (all eight types share one base table), `world_profiles`, `character_profiles`, `entity_aliases`, `relationships` (directed), `tags`, `taggings`.
+- **Canon** — `entities` (all eight types share one base table), `world_profiles`, `character_profiles`, `entity_aliases`, `connection_kinds` + `connection_kind_pairs` (the reusable vocabulary and the entity-type pairs each kind may join), `connections` (stored directed, but oriented by the kind rather than by the author), `tags`, `taggings`.
 - **Documents** — `documents` (the .md file is canonical; `content_cache` exists for indexing and recovery only), `document_links` (many entities per document).
 - **Assets** — `blobs` (content-addressed by sha-256), `assets` (logical), `asset_versions` (immutable), `asset_links` (entity + semantic role), `rendition_recipes`, `asset_crops`, `generated_renditions`.
 - **Inbox** — `inbox_batches`, `inbox_items` (with source-relative provenance and a `name_key` that matches `assets.title_key` for duplicate-name hints).
