@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Desktop launcher for World Hub.
+#
+# Runs the app straight from the project's own Electron install — the same
+# thing `npm start` does — so a launch from the taskbar always opens the
+# current source. Nothing needs to be rebuilt after editing the app.
+#
+# stdout/stderr from the run land in a launcher log; World Hub's own logs
+# stay where the app puts them, under its user-data directory.
+
+set -uo pipefail
+
+here="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)"
+project_root="$(dirname -- "$here")"
+
+log_dir="${XDG_DATA_HOME:-$HOME/.local/share}/world-hub/logs"
+mkdir -p "$log_dir" 2>/dev/null || log_dir=""
+
+fail() {
+    local message="$1"
+    if command -v kdialog >/dev/null 2>&1; then
+        kdialog --title "World Hub" --error "$message"
+    elif command -v zenity >/dev/null 2>&1; then
+        zenity --error --title "World Hub" --text "$message"
+    fi
+    echo "world-hub: $message" >&2
+    exit 1
+}
+
+# The unpacked Electron binary needs no node on PATH; the npm shim is the
+# fallback for an install that only has the CLI wrapper.
+electron_bin="$project_root/node_modules/electron/dist/electron"
+if [[ -x "$electron_bin" ]]; then
+    launch=("$electron_bin" "$project_root")
+elif [[ -x "$project_root/node_modules/.bin/electron" ]]; then
+    launch=("$project_root/node_modules/.bin/electron" "$project_root")
+else
+    fail "Could not find Electron in:\n$project_root/node_modules\n\nInstall the dependencies with:\nnpm install"
+fi
+
+[[ -f "$project_root/package.json" ]] || fail "Project directory is missing: $project_root"
+
+cd -- "$project_root" || fail "Project directory is missing: $project_root"
+
+# --class fixes the window's WM_CLASS so the taskbar matches a running window
+# to this desktop entry instead of showing a second, generic Electron icon.
+launch+=(--class=world-hub)
+
+if [[ -n "$log_dir" ]]; then
+    # Truncated per launch: World Hub is single-instance, so this is the log
+    # of the session that is actually running.
+    exec "${launch[@]}" "$@" >"$log_dir/launcher.log" 2>&1
+fi
+exec "${launch[@]}" "$@"

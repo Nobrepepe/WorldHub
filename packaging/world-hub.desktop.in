@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=World Hub
+GenericName=World Archive
+Comment=Local-first archive for fictional worlds, characters, documents and artwork
+Exec=@EXEC@
+Path=@PROJECT_ROOT@
+Icon=world-hub
+Terminal=false
+Categories=Office;Publishing;
+Keywords=world;worlds;character;characters;archive;library;lore;writing;publishing;
+StartupNotify=true
+StartupWMClass=@WMCLASS@

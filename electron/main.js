@@ -46,6 +46,10 @@ if (!gotLock) {
 }
 
 function onReady() {
+  // Ties the window to the installed desktop entry, so the taskbar shows
+  // World Hub's own icon and name rather than a generic Electron window.
+  if (process.platform === 'linux') app.setDesktopName('world-hub.desktop');
+
   appContext.userDataDir = app.getPath('userData');
   initAppSettings(appContext.userDataDir);
   setLogDirectory(path.join(appContext.userDataDir, 'logs'));
@@ -98,6 +102,7 @@ function hardenSession(ses) {
 function createMainWindow() {
   const state = getWindowState();
   const win = new BrowserWindow({
+    icon: path.join(projectRoot, 'assets/icon/world-hub.png'),
     width: state.width ?? 1440,
     height: state.height ?? 900,
     x: state.x,

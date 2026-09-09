@@ -33,6 +33,28 @@ On first launch, World Hub shows the library chooser:
 
 Only recent paths and window preferences live in Electron's `userData` directory. All creative content lives inside the library folder you chose.
 
+### Launching without a terminal
+
+Install a desktop entry once, and World Hub can be started from the application
+menu and pinned to the taskbar:
+
+```bash
+npm run app:install
+```
+
+This installs `~/.local/share/applications/world-hub.desktop` and the archive
+icon into the user's `hicolor` icon theme. The entry runs
+`packaging/world-hub`, which starts the app straight from this project the same
+way `npm start` does — a launch from the taskbar always opens the current
+source, and nothing needs rebuilding after an edit. Re-run the command after
+moving the project directory; `./packaging/install-desktop-entry.sh --uninstall`
+removes the entry and icons again.
+
+The launcher's output is kept at
+`~/.local/share/world-hub/logs/launcher.log` (truncated per launch), which is
+where a startup failure will explain itself when there is no terminal to watch.
+The app's own logs stay in its `userData` directory.
+
 ## Testing
 
 ```bash
@@ -48,6 +70,12 @@ Tests run against temporary directories only; they never touch a real library.
 npm run dist:linux   # AppImage
 npm run dist:win     # NSIS installer (run on Windows, or under wine)
 ```
+
+Both builds carry the archive icon from `assets/icon/world-hub.png`. That PNG
+is derived, never edited: `packaging/world-hub.svg` is the source of truth, and
+`npm run icon:build` re-renders the PNG from it. A packaged AppImage is a frozen
+copy of the source at build time; for day-to-day use the desktop entry above is
+preferable, since it always runs the current code.
 
 ## Data locations
 
