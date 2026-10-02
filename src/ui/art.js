@@ -9,7 +9,11 @@ export function artImg(url, { alt = '', className = 'art', noArtClass = 'no-art'
   if (!url) {
     return el('div', { class: noArtClass, role: 'img', 'aria-label': `${alt || 'Art'} — none yet` }, caption);
   }
-  const img = el('img', { class: className, src: url, alt, loading: 'lazy' });
+  // `loading` must be set before `src`: the browser decides whether to fetch
+  // the moment src is assigned, so the other order loads every thumbnail
+  // eagerly — including the ones inside folded records, a thousand at once
+  // on a large production.
+  const img = el('img', { class: className, loading: 'lazy', src: url, alt });
   if (assetId && recipeId) {
     const refresh = (event) => {
       if (event.detail?.assetId === assetId && event.detail?.recipeId === recipeId) {

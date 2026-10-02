@@ -61,7 +61,7 @@ export function getProduction(library, id) {
       ORDER BY pe.position
     `).all(id, selection.id).map((entity) => ({
       ...entity,
-      artUrl: entityArt(db, entity.id, entity.type),
+      ...entityArt(db, entity.id, entity.type),
     }));
   }
 
@@ -69,7 +69,7 @@ export function getProduction(library, id) {
   for (const setRow of db.prepare('SELECT * FROM production_asset_sets WHERE production_id = ?').all(id)) {
     const key = setKey(setRow.slot, setRow.entity_id);
     assetSets[key] = db.prepare(`
-      SELECT i.id AS item_id, i.asset_id, i.position, i.value_json, a.title, a.kind, a.status
+      SELECT i.id AS item_id, i.asset_id, i.position, i.value_json, a.title, a.kind, a.status, a.current_version_id
       FROM production_asset_items i JOIN assets a ON a.id = i.asset_id
       WHERE i.set_id = ? ORDER BY i.position
     `).all(setRow.id).map((item) => ({
@@ -80,7 +80,8 @@ export function getProduction(library, id) {
       title: item.title,
       kind: item.kind,
       status: item.status,
-      thumbUrl: assetDisplayUrl(db, item.asset_id),
+      currentVersionId: item.current_version_id,
+      thumbUrl: assetDisplayUrl(db, item.asset_id, THUMB_RECIPE),
     }));
   }
 
@@ -116,16 +117,28 @@ export function getProduction(library, id) {
   };
 }
 
+/**
+ * The editor shows every thumbnail at row size, so it asks for the small
+ * square rendition rather than the original: a production with fifty
+ * characters lists over a thousand pieces of art, and originals run to
+ * several megabytes each. Where the rendition has not been made yet the
+ * original stands in, and the editor has it generated once the row is
+ * on screen.
+ */
+const THUMB_RECIPE = 'thumbnail_square';
+
 function entityArt(db, id, type) {
+  let assetId = null;
   if (type === 'character') {
-    const profile = db.prepare('SELECT portrait_asset_id FROM character_profiles WHERE entity_id = ?').get(id);
-    return assetDisplayUrl(db, profile?.portrait_asset_id);
+    assetId = db.prepare('SELECT portrait_asset_id FROM character_profiles WHERE entity_id = ?').get(id)?.portrait_asset_id;
+  } else if (type === 'world') {
+    assetId = db.prepare('SELECT cover_asset_id FROM world_profiles WHERE entity_id = ?').get(id)?.cover_asset_id;
   }
-  if (type === 'world') {
-    const profile = db.prepare('SELECT cover_asset_id FROM world_profiles WHERE entity_id = ?').get(id);
-    return assetDisplayUrl(db, profile?.cover_asset_id);
-  }
-  return null;
+  const artUrl = assetDisplayUrl(db, assetId, THUMB_RECIPE);
+  const artVersionId = artUrl
+    ? db.prepare('SELECT current_version_id FROM assets WHERE id = ?').get(assetId)?.current_version_id ?? null
+    : null;
+  return { artUrl, artVersionId };
 }
 
 export function setKey(slot, entityId = '') {

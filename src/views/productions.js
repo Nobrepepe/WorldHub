@@ -153,6 +153,36 @@ function revealDestination(destination) {
   setTimeout(() => anchor.classList.remove('flash-target'), 1800);
 }
 
+/* ---------------- row thumbnails ---------------- */
+
+/**
+ * Every thumbnail in the editor is row-sized, so it shows the small square
+ * rendition the server already points at when one exists. A rendition not
+ * yet made is requested once the row is on screen — never for rows inside
+ * folded records, which a production of fifty characters has a thousand of.
+ *
+ * Until it arrives the row holds a blank tile rather than the original:
+ * originals run to megabytes, and a fast scroll past hundreds of them keeps
+ * that many downloads open at once while the renditions are being made.
+ */
+const THUMB_RECIPE = 'thumbnail_square';
+
+function rowThumb(url, { alt, versionId = null }) {
+  const thumb = (src) => artImg(src, { alt, className: 'row-thumb', noArtClass: 'row-thumb no-art' });
+  const needsRendition = url && versionId && !url.startsWith('worldhub://media/rendition/');
+  if (!needsRendition || getState().library?.readOnly) return thumb(url);
+
+  const pending = el('div', { class: 'row-thumb no-art', role: 'img', 'aria-label': alt });
+  const observer = new IntersectionObserver(async (entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    observer.disconnect();
+    const rendition = await callSafe('rendition.generate', { versionId, recipeId: THUMB_RECIPE });
+    if (pending.isConnected) pending.replaceWith(thumb(rendition?.url ?? url));
+  }, { rootMargin: '200px' });
+  observer.observe(pending);
+  return pending;
+}
+
 /* ---------------- field sections ---------------- */
 
 /**
@@ -749,7 +779,7 @@ function recordBlock({ live, adopt, selection, entity, index, entities, readOnly
     },
   },
     toggle,
-    artImg(entity.artUrl, { alt: entity.name, className: 'row-thumb', noArtClass: 'row-thumb no-art' }),
+    rowThumb(entity.artUrl, { alt: entity.name, versionId: entity.artVersionId }),
     el('div', { class: 'row-main' },
       el('div', { class: 'row-title' }, `${index + 1}. ${entity.name}`,
         el('span', { class: 'quiet' }, `  ${entity.type} · canonical, by reference`)),
@@ -852,7 +882,7 @@ function assetSetEditor({ live, adopt, set, entity, readOnly, compact = false, d
     }
     current.forEach((item, index) => {
       listEl.append(el('div', { class: 'row' },
-        artImg(item.thumbUrl, { alt: item.title, className: 'row-thumb', noArtClass: 'row-thumb no-art' }),
+        rowThumb(item.thumbUrl, { alt: item.title, versionId: item.kind === 'image' ? item.currentVersionId : null }),
         el('div', { class: 'row-main' },
           el('div', { class: 'row-title' }, `${index + 1}. ${item.title}`),
           el('div', { class: 'row-sub' }, item.kind),
