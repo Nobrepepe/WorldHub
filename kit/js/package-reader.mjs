@@ -10,7 +10,9 @@
  * validated nothing at all.
  *
  * Reads Package Protocol 1 and 2 and presents both in the current shape,
- * so packages installed before the rename keep working.
+ * so packages installed before the rename keep working — including packages
+ * published before connections carried kind definitions, whose connections
+ * still read through the labels they were published with.
  */
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -32,6 +34,24 @@ export class PackageError extends Error {
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 const sha256File = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
+
+/**
+ * Read a catalog file a package may predate.
+ *
+ * `catalog/connection-kinds.json` arrived after Protocol 1 and part-way
+ * through Protocol 2, so its absence is a fact about when a package was
+ * published, not a fault. A package that has it is verified against it; one
+ * that has not still loads, and its connections read the way they always did.
+ */
+function readJsonOptional(root, packagePath, fallback) {
+  const path = join(root, ...packagePath.split('/'));
+  if (!existsSync(path) || !statSync(path).isFile()) return fallback;
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8'));
+  } catch {
+    throw new PackageError(`The package file ${packagePath} is not valid JSON.`);
+  }
+}
 
 function readJson(root, packagePath) {
   const path = join(root, ...packagePath.split('/'));
@@ -134,6 +154,63 @@ export class PackageInfo {
       }
     }
     return null;
+  }
+
+  /* ---- connections ---- */
+
+  /** Every published connection kind, by its stable id. */
+  connectionKindsById() {
+    return new Map(this.connectionKinds.map((kind) => [kind.id, kind]));
+  }
+
+  /**
+   * The label one end of a connection wears.
+   *
+   * The kind is asked first, so a rename in the authoring library reaches
+   * every connection that uses it; the record's own label is the fallback,
+   * which is all a package published before kinds existed carries.
+   */
+  connectionLabel(connection, direction) {
+    const kind = this.connectionKindsById().get(connection.kindId);
+    if (!kind) return direction === 'to' ? (connection.inverseLabel ?? '') : (connection.label ?? '');
+    if (kind.symmetric) return kind.forwardLabel;
+    return direction === 'to'
+      ? (connection.inverseLabel || kind.inverseLabel)
+      : (connection.label || kind.forwardLabel);
+  }
+
+  /**
+   * Every connection touching a record, written from that record's side.
+   *
+   * `direction` is "from" when the record is the connection's source and
+   * "to" when it is the target; `otherId` is always the record at the other
+   * end, so a caller never has to work out which column it occupies.
+   */
+  connectionsFor(entityId) {
+    return this.relationships
+      .filter((connection) => connection.sourceId === entityId || connection.targetId === entityId)
+      .map((connection) => {
+        const from = connection.sourceId === entityId;
+        const direction = from ? 'from' : 'to';
+        return {
+          ...connection,
+          direction,
+          otherId: from ? connection.targetId : connection.sourceId,
+          label: this.connectionLabel(connection, direction),
+        };
+      });
+  }
+
+  /** Connections running out of a record, optionally of one kind only. */
+  connectionsFrom(entityId, kindId = null) {
+    return this.relationships.filter((connection) => connection.sourceId === entityId
+      && (kindId === null || connection.kindId === kindId || connection.type === kindId));
+  }
+
+  /** Connections running into a record, optionally of one kind only. */
+  connectionsTo(entityId, kindId = null) {
+    return this.relationships.filter((connection) => connection.targetId === entityId
+      && (kindId === null || connection.kindId === kindId || connection.type === kindId));
   }
 
   /** The best index entry for an asset given a recipe preference order. */
@@ -273,15 +350,22 @@ export function loadPackage(root, expectedAppType, {
   const worlds = readJson(root, 'catalog/worlds.json');
   const characters = readJson(root, 'catalog/characters.json');
   const relationships = readJson(root, 'catalog/relationships.json');
+  const connectionKinds = readJsonOptional(root, 'catalog/connection-kinds.json', []);
   const documents = readJson(root, 'catalog/documents.json');
   const tags = readJson(root, 'catalog/tags.json');
   const assetIndex = readJson(root, 'assets/index.json');
   const content = readJson(root, 'production/content.json');
 
   const entityIds = new Set(entities.map((entity) => entity.id));
+  const kindIds = new Set(connectionKinds.map((kind) => kind.id));
   for (const relationship of relationships) {
     if (!entityIds.has(relationship.sourceId) || !entityIds.has(relationship.targetId)) {
       throw new PackageError('A packaged relationship references a missing record.');
+    }
+    /* Only when the package claims to carry kinds at all: a connection whose
+       kind is missing would arrive as a label with nothing behind it. */
+    if (connectionKinds.length > 0 && relationship.kindId !== undefined && !kindIds.has(relationship.kindId)) {
+      throw new PackageError('A packaged connection names a kind that is not in the package.');
     }
   }
   for (const document of documents) {
@@ -326,7 +410,7 @@ export function loadPackage(root, expectedAppType, {
 
   return new PackageInfo({
     root, manifest, contract, content, entities, worlds, characters,
-    relationships, documents, assetIndex, checksums, tags,
+    relationships, connectionKinds, documents, assetIndex, checksums, tags,
     protocolVersion, renamedFrom: renames,
   });
 }

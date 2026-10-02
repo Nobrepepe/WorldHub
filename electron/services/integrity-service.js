@@ -83,6 +83,40 @@ export async function runIntegrityChecks(library) {
     add('note', 'inbox.orphaned_staging', `${orphans} file(s) in the Inbox staging folders have no Inbox record. They are left in place; review them manually.`);
   }
 
+  /* connections whose kind no longer describes them */
+  const strayPairs = db.prepare(`
+    SELECT c.id, k.forward_label, s.type AS source_type, s.name AS source_name,
+           t.type AS target_type, t.name AS target_name
+    FROM connections c
+    JOIN connection_kinds k ON k.id = c.kind_id
+    JOIN entities s ON s.id = c.source_id
+    JOIN entities t ON t.id = c.target_id
+    WHERE NOT EXISTS (
+      SELECT 1 FROM connection_kind_pairs p
+      WHERE p.kind_id = c.kind_id AND p.source_type = s.type AND p.target_type = t.type
+    )
+  `).all();
+  for (const stray of strayPairs.slice(0, 20)) {
+    add('note', 'connection.pair_unlisted',
+      `“${stray.source_name}” (${stray.source_type}) and “${stray.target_name}” (${stray.target_type}) are connected as “${stray.forward_label}”, which no longer lists that combination. The fact is kept; widen the kind on the Connections screen or move the connection to another kind.`);
+  }
+
+  /* the same fact filed twice */
+  const duplicateConnections = db.prepare(`
+    SELECT c.kind_id, c.source_id, c.target_id, COUNT(*) n,
+           s.name AS source_name, t.name AS target_name, k.forward_label
+    FROM connections c
+    JOIN connection_kinds k ON k.id = c.kind_id
+    JOIN entities s ON s.id = c.source_id
+    JOIN entities t ON t.id = c.target_id
+    GROUP BY c.kind_id, c.source_id, c.target_id
+    HAVING n > 1
+  `).all();
+  for (const duplicate of duplicateConnections.slice(0, 20)) {
+    add('note', 'connection.duplicate',
+      `“${duplicate.source_name}” and “${duplicate.target_name}” are connected as “${duplicate.forward_label}” ${duplicate.n} times. Upgrades keep duplicates rather than choosing one to delete; remove the extra from the Connections screen.`);
+  }
+
   /* publications */
   for (const publication of db.prepare('SELECT id FROM publications').all()) {
     const result = verifyPublication(library, publication.id);
@@ -147,7 +181,7 @@ export async function runRepair(library, repairId) {
     }
     case 'rebuild-search': {
       const counts = rebuildSearchIndex(library);
-      return { repaired: true, message: `Rebuilt the index over ${counts.entities} records, ${counts.documents} documents, ${counts.assets} assets, and ${counts.relationships} relationships.` };
+      return { repaired: true, message: `Rebuilt the index over ${counts.entities} records, ${counts.documents} documents, ${counts.assets} assets, and ${counts.connections} connections.` };
     }
     case 'regenerate-renditions': {
       const db = library.db;

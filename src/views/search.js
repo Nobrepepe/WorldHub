@@ -10,7 +10,7 @@ const GROUP_LABELS = {
   entry: 'Other entries',
   document: 'Documents',
   asset: 'Assets',
-  relationship: 'Relationships',
+  connection: 'Connections',
 };
 
 /**
@@ -28,7 +28,7 @@ function buildSearchList({ onOpen }) {
     flat = [];
     active = -1;
     if (!query.trim()) {
-      listHost.append(el('p', { class: 'empty-state', style: { padding: '0.5rem 0' } }, 'Type to search names, aliases, profiles, documents, artwork, and relationships.'));
+      listHost.append(el('p', { class: 'empty-state', style: { padding: '0.5rem 0' } }, 'Type to search names, aliases, profiles, documents, artwork, and connections.'));
       return;
     }
     if (groups.length === 0) {
@@ -88,7 +88,7 @@ function matchReason(item) {
     profile: 'matched the profile',
     document: 'matched the text',
     asset: 'matched the label, files, or tags',
-    relationship: 'matched the relationship',
+    connection: 'matched the connection',
   };
   const why = facetNames[item.facet] ?? 'matched';
   return item.snippet ? `${why}: ${item.snippet}` : why;
@@ -180,7 +180,7 @@ export async function renderSearchPage() {
             { value: 'entry', label: 'Other entries' },
             { value: 'document', label: 'Documents' },
             { value: 'asset', label: 'Assets' },
-            { value: 'relationship', label: 'Relationships' },
+            { value: 'connection', label: 'Connections' },
           ],
           onChange: (value) => { filters.type = value; run(); },
           ariaLabel: 'Filter by kind',

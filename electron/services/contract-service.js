@@ -110,6 +110,81 @@ export function validateContractJson(rawContract) {
     checkId(set.id, 'assetSets');
     checkGlobal(assetSetOwners, set.id, 'the production level', 'asset-set');
   }
+
+  /* Connection selections name two entity selections and the canonical kinds
+     that run between them. Whether those kinds exist, and whether they can
+     join the record types the two selections allow, needs the library — see
+     validateContractAgainstLibrary. What can be checked from the document
+     alone is checked here, so importing a file still works with nothing
+     open. */
+  const selectionIds = new Map((contract.entitySelections ?? []).map((selection) => [selection.id, selection]));
+  for (const connection of contract.connectionSelections ?? []) {
+    checkId(connection.id, 'connectionSelections');
+    for (const [key, role] of [['sourceSelection', 'from'], ['targetSelection', 'to']]) {
+      if (!selectionIds.has(connection[key])) {
+        issues.push({
+          severity: 'error',
+          code: 'contract.connection_selection_missing',
+          message: `Connection selection "${connection.id}" runs ${role} "${connection[key]}", which is not one of this contract's record selections.`,
+        });
+      }
+    }
+    if (connection.minPerSource !== undefined && connection.maxPerSource !== undefined
+      && connection.minPerSource > connection.maxPerSource) {
+      issues.push({
+        severity: 'error',
+        code: 'contract.count_conflict',
+        message: `Connection selection "${connection.id}" has minPerSource greater than maxPerSource.`,
+      });
+    }
+  }
+  return issues;
+}
+
+/**
+ * The checks that need a library to answer: do the connection kinds this
+ * contract names exist here, and can they join the record types the two
+ * selections allow?
+ *
+ * Kept apart from validateContractJson so that stays pure — the import path
+ * and the scripts call it with no library open, and a contract file has to
+ * be readable before anything is opened. A contract naming a kind this
+ * library does not have is not a broken document; it is a document this
+ * library cannot yet satisfy, which is a different sentence to say.
+ */
+export function validateContractAgainstLibrary(library, rawContract) {
+  const contract = normalizeContractJson(rawContract);
+  const issues = [];
+  const db = library.db;
+  const selections = new Map((contract.entitySelections ?? []).map((selection) => [selection.id, selection]));
+
+  for (const connection of contract.connectionSelections ?? []) {
+    const source = selections.get(connection.sourceSelection);
+    const target = selections.get(connection.targetSelection);
+    if (!source || !target) continue; // already reported by the pure pass
+
+    for (const kindId of connection.kinds ?? []) {
+      const kind = db.prepare('SELECT id, forward_label FROM connection_kinds WHERE id = ?').get(kindId);
+      if (!kind) {
+        issues.push({
+          severity: 'error',
+          code: 'contract.connection_kind_missing',
+          message: `“${connection.label}” asks for the connection kind "${kindId}", which this library does not have. Define it on the Connections screen, or correct the contract.`,
+        });
+        continue;
+      }
+      const pairs = db.prepare('SELECT source_type, target_type FROM connection_kind_pairs WHERE kind_id = ?').all(kindId);
+      const compatible = pairs.some((pair) =>
+        source.entityTypes.includes(pair.source_type) && target.entityTypes.includes(pair.target_type));
+      if (!compatible) {
+        issues.push({
+          severity: 'error',
+          code: 'contract.connection_kind_incompatible',
+          message: `“${kind.forward_label}” joins ${pairs.map((pair) => `${pair.source_type} to ${pair.target_type}`).join(', ')}, which cannot run from “${source.label}” (${source.entityTypes.join(', ')}) to “${target.label}” (${target.entityTypes.join(', ')}).`,
+        });
+      }
+    }
+  }
   return issues;
 }
 

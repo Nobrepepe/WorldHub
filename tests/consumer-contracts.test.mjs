@@ -126,7 +126,7 @@ test('herocollector package carries creative facts only, with their art', async 
   // Cosmetics are ordered, not rank-assigned: the game decides the milestones.
   assert.equal(worldValues.hc_mastery_cosmetics[0].mc_character, built.perCharacter[0].hero.id);
   assert.equal(worldValues.hc_mastery_cosmetics[0].mc_name, 'Vigil Ash');
-  assert.ok(index.some((entry) => entry.assetId === built.relicArt.id), 'relic piece art from a nested list is packaged');
+  assert.ok(index.some((entry) => entry.assetId === built.relicArt.id), 'the relic plate is packaged');
   assert.ok(index.some((entry) => entry.assetId === built.worldCover.id && entry.recipeId === 'tile_16x9'),
     'the world cover is packaged with its recipe; it also carries the world Crisis');
 
@@ -135,13 +135,29 @@ test('herocollector package carries creative facts only, with their art', async 
   assert.equal(content.entityValues[built.emberguard.id].hc_faction_explanation,
     'They kept the same vigil, and it shows.');
 
+  /* And belonging to one is stated once, as a canonical connection, instead
+     of a second time as a per-character reference the two could disagree
+     about. The game's one-faction rule lives in its contract, not in canon. */
+  const relationships = JSON.parse(fs.readFileSync(path.join(dir, 'catalog', 'relationships.json'), 'utf8'));
+  const kinds = JSON.parse(fs.readFileSync(path.join(dir, 'catalog', 'connection-kinds.json'), 'utf8'));
+  const memberships = relationships.filter((connection) => connection.kindId === 'member_of');
+  assert.equal(memberships.length, built.perCharacter.length, 'every hero belongs to the Emberguard');
+  assert.ok(memberships.every((connection) => connection.targetId === built.emberguard.id));
+  assert.ok(kinds.some((kind) => kind.id === 'member_of'),
+    'the kind travels with the package, so the game need not hard-code what it means');
+
+  const contract = JSON.parse(fs.readFileSync(path.join(dir, 'production', 'contract.json'), 'utf8'));
+  const declared = contract.connectionSelections.find((selection) => selection.id === 'hc_faction_membership');
+  assert.deepEqual(declared.kinds, ['member_of']);
+  assert.equal(declared.maxPerSource, 1, "the one-faction restriction is the game's, and is stated as the game's");
+
   // No mechanical library reaches the package at all.
   assert.equal(content.values.hc_crises, undefined);
   assert.equal(content.values.hc_expedition_templates, undefined);
 
   const heroValues = content.entityValues[built.perCharacter[0].hero.id];
   assert.equal(heroValues.hc_archetype, 'leader');
-  assert.equal(heroValues.hc_faction, built.emberguard.id);
+  assert.equal(heroValues.hc_faction, undefined, 'membership is no longer copied onto the character');
   assert.equal(heroValues.hc_tier, undefined, 'acquisition tiers are gone');
   assert.equal(heroValues.hc_starting, undefined, 'the starting five are drawn per save');
   assert.equal(heroValues.hc_traits, undefined, 'traits went with the factions that replaced them');

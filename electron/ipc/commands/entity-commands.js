@@ -3,7 +3,6 @@ import { v } from '../validate.js';
 import {
   ENTITY_TYPES, createEntity, getEntity, updateEntity, listEntities, entityUsage,
   archiveEntity, restoreEntity,
-  createRelationship, updateRelationship, deleteRelationship, listRelationships, listRelationshipTypes,
   listTags, setSubjectTags, tagsFor,
   preferredRendition,
 } from '../../services/entity-service.js';
@@ -100,54 +99,6 @@ register('entity.restore', {
   handler: (ctx, { id }) => restoreEntity(ctx.library, id),
 });
 
-register('relationship.create', {
-  requiresWrite: true,
-  payload: v.object({
-    sourceId: v.uuid(),
-    targetId: v.uuid(),
-    relType: v.string({ min: 1, max: 100, trim: true }),
-    label: v.optional(v.string({ max: 200 }), ''),
-    description: v.optional(v.string({ max: 2000 }), ''),
-    inverseLabel: v.optional(v.string({ max: 200 }), ''),
-  }),
-  handler: (ctx, payload) => createRelationship(ctx.library, payload),
-});
-
-register('relationship.update', {
-  requiresWrite: true,
-  payload: v.object({
-    id: v.uuid(),
-    relType: v.optional(v.string({ min: 1, max: 100, trim: true })),
-    label: v.optional(v.string({ max: 200 })),
-    description: v.optional(v.string({ max: 2000 })),
-    inverseLabel: v.optional(v.string({ max: 200 })),
-    position: v.optional(v.integer({ min: 0, max: 100000 })),
-    status: v.optional(v.enum(['draft', 'canonical', 'archived'])),
-  }),
-  handler: (ctx, { id, ...patch }) => updateRelationship(ctx.library, id, patch),
-});
-
-register('relationship.delete', {
-  requiresWrite: true,
-  payload: v.object({ id: v.uuid() }),
-  handler: (ctx, { id }) => deleteRelationship(ctx.library, id),
-});
-
-register('relationship.list', {
-  payload: v.object({
-    entityId: optionalUuid(),
-    relType: v.optional(v.string({ max: 100 })),
-    worldId: optionalUuid(),
-    limit: v.optional(v.integer({ min: 1, max: 2000 }), 500),
-  }),
-  handler: (ctx, payload) => listRelationships(ctx.library, payload),
-});
-
-register('relationship.types', {
-  payload: v.none(),
-  handler: (ctx) => listRelationshipTypes(ctx.library),
-});
-
 register('tag.list', {
   payload: v.none(),
   handler: (ctx) => listTags(ctx.library),
@@ -174,7 +125,7 @@ register('tag.forSubject', {
 register('search.query', {
   payload: v.object({
     query: v.string({ min: 1, max: 200 }),
-    types: v.optional(v.array(v.enum(['world', 'character', 'entry', 'document', 'asset', 'relationship']), { max: 6 })),
+    types: v.optional(v.array(v.enum(['world', 'character', 'entry', 'document', 'asset', 'connection']), { max: 6 })),
     worldId: optionalUuid(),
     tagId: optionalUuid(),
     role: v.optional(v.string({ max: 100 })),

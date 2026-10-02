@@ -225,3 +225,159 @@
   .def-list { grid-template-columns: 1fr; gap: 0.1rem; }
   .def-list dd { margin-bottom: 0.6rem; }
 }
+
+/* ---- home: the wall ---- */
+
+/* Home is one wall the size of the window. It reaches past the main
+   document's padding so the art can bleed to the edges, and it is a
+   size container: every piece is placed and sized as a fraction of the
+   wall, so the hanging keeps its proportions at any window size. */
+.home-wall {
+  position: relative;
+  margin: -2.2rem -3rem -4rem -2.6rem;
+  height: 100vh;
+  min-height: 36rem;
+  overflow: hidden;
+  container-type: size;
+  isolation: isolate;
+}
+@media (max-width: 980px) {
+  .home-wall { margin: -3.2rem -1.4rem -3rem; }
+}
+
+.wall-piece {
+  position: absolute;
+  left: calc(var(--x) * 100cqw);
+  top: calc(var(--y) * 100cqh);
+  height: calc(var(--h) * 100cqh);
+  aspect-ratio: var(--ar);
+  translate: -50% -50%;
+  transform-origin: 50% 60%;
+  display: block;
+  color: var(--text);
+  transition:
+    opacity calc(2.4s * var(--motion, 1)) ease,
+    transform calc(2.4s * var(--motion, 1)) ease,
+    filter calc(2.4s * var(--motion, 1)) ease;
+}
+.wall-piece:not(.is-up) { visibility: hidden; }
+.wall-piece.is-leaving {
+  opacity: 0 !important;
+  transform: translateY(-3.5cqh) scale(0.74) !important;
+  filter: saturate(0.4) brightness(0.4) !important;
+}
+.wall-piece:hover, .wall-piece:focus-visible {
+  opacity: 1 !important;
+  filter: none !important;
+  z-index: 60 !important;
+  color: var(--text);
+  transition-duration: 220ms;
+}
+.wall-piece:focus-visible { outline: 1px solid rgba(244, 236, 225, 0.5); outline-offset: -1px; }
+
+.wall-ink { display: block; width: 100%; height: 100%; }
+.wall-ink img,
+.wall-lead img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
+}
+/* Soft edges on top of the art's own alpha: pieces meet without seams. */
+.wall-ink img {
+  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 46%, black 46%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 46%, black 46%, transparent 100%);
+}
+
+/* A stamp: arrives a little large, blurred and bright, presses in, settles. */
+.wall-ink.stamping { animation: wall-stamp 1.05s cubic-bezier(0.2, 0.75, 0.25, 1) both; }
+@keyframes wall-stamp {
+  0% { opacity: 0; transform: scale(1.18); filter: blur(8px) brightness(1.8); }
+  42% { opacity: 1; transform: scale(0.97); filter: blur(0) brightness(1.18); }
+  68% { transform: scale(1.01); filter: brightness(1.04); }
+  100% { opacity: 1; transform: scale(1); filter: none; }
+}
+
+.wall-cap {
+  position: absolute;
+  left: 0; right: 0; bottom: 6%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  text-shadow: 0 0 18px var(--bg), 0 0 4px var(--bg);
+  pointer-events: none;
+}
+.wall-piece:hover .wall-cap, .wall-piece:focus-visible .wall-cap { opacity: 1; }
+.wall-cap-name { font-family: var(--serif); font-size: calc(1.3rem * var(--text-scale)); line-height: 1.1; }
+
+/* The character who keeps the wall: full length, dissolving into the floor. */
+.wall-lead {
+  position: absolute;
+  right: 1%;
+  top: 2.5%;
+  height: 100cqh;
+  aspect-ratio: 9 / 16;
+  z-index: 34;
+  opacity: 0;
+}
+.wall-lead.wall-lead-portrait { height: 90cqh; aspect-ratio: 3 / 4; }
+.wall-lead img {
+  -webkit-mask-image: linear-gradient(to bottom, black 52%, transparent 96%);
+  mask-image: linear-gradient(to bottom, black 52%, transparent 96%);
+}
+.wall-lead.is-in { opacity: 1; animation: wall-lead-in calc(2.4s * var(--motion, 1)) ease both; }
+@keyframes wall-lead-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Words over art: no panels, only the floor's colour as a soft shadow. */
+.wall-head, .wall-keeper, .wall-just {
+  position: absolute;
+  z-index: 70;
+  text-shadow: 0 0 28px var(--bg), 0 0 10px var(--bg);
+}
+.wall-head { left: 2.6rem; top: 2.2rem; max-width: min(36rem, 55cqw); }
+.wall-head h1 { font-size: calc(2.75rem * var(--text-scale)); line-height: 1.08; margin-bottom: 0.6rem; }
+.wall-eyebrow { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.wall-rehang {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--text-dim);
+  min-height: 2.75rem;
+}
+.wall-attention { color: var(--text-dim); font-size: calc(0.875rem * var(--text-scale)); }
+.wall-attention .btn { padding: 0; }
+
+.wall-keeper { right: 3rem; bottom: 2.75rem; text-align: right; }
+.wall-keeper-name {
+  font-family: var(--serif);
+  font-size: calc(3.75rem * var(--text-scale));
+  line-height: 1;
+  margin: 0.4rem 0 0.6rem;
+}
+.wall-keeper a { font-size: calc(0.875rem * var(--text-scale)); }
+
+.wall-just { left: 2.6rem; bottom: 2.75rem; }
+.wall-just-name { font-family: var(--serif); font-size: calc(1.5rem * var(--text-scale)); }
+.wall-just-meta { color: var(--muted); font-size: calc(0.8125rem * var(--text-scale)); white-space: pre-wrap; }
+.wall-just.is-new { animation: wall-just-in 900ms ease both; }
+@keyframes wall-just-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 980px) {
+  .wall-head { top: 3.2rem; left: 1.4rem; }
+  .wall-keeper { right: 1.4rem; }
+  .wall-just { left: 1.4rem; }
+}
+
+:root[data-reduced-motion="true"] .wall-ink.stamping,
+:root[data-reduced-motion="true"] .wall-lead.is-in,
+:root[data-reduced-motion="true"] .wall-just.is-new { animation: none; }

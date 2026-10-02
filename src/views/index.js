@@ -4,7 +4,7 @@ import { renderSearchPage } from './search.js';
 import { renderWorlds, renderWorldDetail } from './worlds.js';
 import { renderCharacters, renderCharacterDetail } from './characters.js';
 import { renderEntries, renderEntryDetail } from './entries.js';
-import { renderRelationships } from './relationships.js';
+import { renderConnections } from './connections.js';
 import { renderDocuments, renderDocumentDetail } from './documents.js';
 import { renderAssets, renderAssetDetail } from './assets.js';
 import { renderInbox } from './inbox.js';
@@ -24,7 +24,9 @@ export function registerAllViews() {
   registerRoute('/character/:id', renderCharacterDetail);
   registerRoute('/entries', renderEntries);
   registerRoute('/entry/:id', renderEntryDetail);
-  registerRoute('/relationships', renderRelationships);
+  registerRoute('/connections', renderConnections);
+  /* Kept so links written before the rename still land somewhere real. */
+  registerRoute('/relationships', renderConnections);
   registerRoute('/documents', renderDocuments);
   registerRoute('/document/:id', renderDocumentDetail);
   registerRoute('/assets', renderAssets);

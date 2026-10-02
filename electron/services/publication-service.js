@@ -125,9 +125,41 @@ export function resolveSnapshot(library, productionId) {
     return { row, aliases, tags };
   }).sort((a, b) => a.row.id.localeCompare(b.row.id));
 
-  /* non-archived relationships fully inside the included set */
-  const relationships = db.prepare(`SELECT * FROM relationships WHERE status != 'archived' ORDER BY id`).all()
-    .filter((rel) => entityIds.has(rel.source_id) && entityIds.has(rel.target_id));
+  /* non-archived connections fully inside the included set */
+  const connections = db.prepare(`
+    SELECT c.*, k.category, k.forward_label, k.inverse_label
+    FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
+    WHERE c.status != 'archived' ORDER BY c.id
+  `).all().filter((row) => entityIds.has(row.source_id) && entityIds.has(row.target_id));
+
+  /* The definitions of every kind the package uses, plus any the contract
+     names but nothing in this snapshot happens to use — a consumer reading
+     a contract that mentions `member_of` should find out what `member_of`
+     means from the package rather than from its own source code. A custom
+     kind travels the same way as a built-in one, so a setting-specific fact
+     needs no consumer change at all. */
+  const usedKindIds = new Set(connections.map((connection) => connection.kind_id));
+  for (const selection of contract.connectionSelections ?? []) {
+    for (const kindId of selection.kinds ?? []) usedKindIds.add(kindId);
+  }
+  const connectionKinds = [...usedKindIds].sort().map((kindId) => {
+    const kind = db.prepare('SELECT * FROM connection_kinds WHERE id = ?').get(kindId);
+    if (!kind) return null;
+    return {
+      id: kind.id,
+      category: kind.category,
+      forwardLabel: kind.forward_label,
+      inverseLabel: kind.inverse_label,
+      forwardSection: kind.forward_section,
+      inverseSection: kind.inverse_section,
+      symmetric: !!kind.symmetric,
+      builtin: !!kind.is_builtin,
+      pairs: db.prepare(
+        'SELECT source_type, target_type FROM connection_kind_pairs WHERE kind_id = ? ORDER BY source_type, target_type')
+        .all(kindId)
+        .map((pair) => [pair.source_type, pair.target_type]),
+    };
+  }).filter(Boolean);
 
   /* documents by contract mode */
   const documentsMode = contract.documents?.mode ?? 'linked';
@@ -242,7 +274,7 @@ export function resolveSnapshot(library, productionId) {
     return { id: row.id, name: row.name, group: row.group_name };
   });
 
-  return { production, contract, entities, relationships, documents, assetItems, tags, documentsMode };
+  return { production, contract, entities, connections, connectionKinds, documents, assetItems, tags, documentsMode };
 }
 
 /* ---------------- preview ---------------- */
@@ -364,7 +396,7 @@ export async function previewPublication(library, productionId) {
         assetId: item.asset.id, title: item.asset.title, versionId: item.version.id,
         setId: item.setId, recipes: item.recipes,
       })),
-      relationships: snapshot.relationships.length,
+      connections: snapshot.connections.length,
       documentsMode: snapshot.documentsMode,
       fileCount: files.length + snapshot.documents.length + 10,
     },
@@ -556,16 +588,27 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
     });
   writePackageFile('catalog/characters.json', stableJson(charactersJson));
 
-  writePackageFile('catalog/relationships.json', stableJson(snapshot.relationships.map((rel) => ({
-    id: rel.id,
-    sourceId: rel.source_id,
-    targetId: rel.target_id,
-    type: rel.rel_type,
-    label: rel.label,
-    inverseLabel: rel.inverse_label,
-    description: rel.description,
-    position: rel.position,
+  /* The published file keeps its Protocol 1 name and every field a consumer
+     already reads. `type`, `label` and `inverseLabel` are still populated —
+     resolved from the kind now rather than retyped per record — so a reader
+     vendored before connections existed sees exactly what it saw before. */
+  writePackageFile('catalog/relationships.json', stableJson(snapshot.connections.map((connection) => ({
+    id: connection.id,
+    sourceId: connection.source_id,
+    targetId: connection.target_id,
+    type: connection.kind_id,
+    label: connection.label_override || connection.forward_label,
+    inverseLabel: connection.inverse_label_override || connection.inverse_label,
+    description: connection.description,
+    position: connection.position,
+    /* Added, never substituted. `kindId` is the stable machine name and
+       `type` carries the same string, so a reader vendored before any of
+       this existed reads exactly what it read before. */
+    kindId: connection.kind_id,
+    category: connection.category,
   }))));
+
+  writePackageFile('catalog/connection-kinds.json', stableJson(snapshot.connectionKinds));
 
   writePackageFile('catalog/tags.json', stableJson(snapshot.tags));
 
@@ -709,6 +752,8 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
       entities: snapshot.entities.length,
       documents: snapshot.documents.length,
       assets: new Set(snapshot.assetItems.map((item) => item.asset.id)).size,
+      connections: snapshot.connections.length,
+      connectionKinds: snapshot.connectionKinds.length,
       files: files.length + 2, // + manifest + checksums
     },
     complete: true,
@@ -724,6 +769,12 @@ async function assemblePackage(library, snapshot, publicationId, publishedAt, wo
 
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
   return { files, totalBytes, manifest };
+}
+
+/** The connection kinds the packaged contract's selections name. */
+function packagedContractKinds(workAbs) {
+  const contract = JSON.parse(fs.readFileSync(path.join(workAbs, 'production', 'contract.json'), 'utf8'));
+  return (contract.connectionSelections ?? []).flatMap((selection) => selection.kinds ?? []);
 }
 
 /** Verify schemas, references, existence, sizes, and checksums from the assembled copy. */
@@ -777,9 +828,26 @@ function verifyAssembledPackage(workAbs, assembly) {
   const entities = JSON.parse(fs.readFileSync(path.join(workAbs, 'catalog', 'entities.json'), 'utf8'));
   const entityIds = new Set(entities.map((entity) => entity.id));
   const relationships = JSON.parse(fs.readFileSync(path.join(workAbs, 'catalog', 'relationships.json'), 'utf8'));
+  const connectionKinds = JSON.parse(fs.readFileSync(path.join(workAbs, 'catalog', 'connection-kinds.json'), 'utf8'));
+  const kindIds = new Set(connectionKinds.map((kind) => kind.id));
   for (const rel of relationships) {
     if (!entityIds.has(rel.sourceId) || !entityIds.has(rel.targetId)) {
       throw domainError('publish.relationship_dangling', 'A packaged relationship references a record outside the package.');
+    }
+    /* A connection whose kind did not ship would reach the consumer as a
+       label it has no way to read — self-containment applies to meaning as
+       much as to bytes. */
+    if (!kindIds.has(rel.kindId)) {
+      throw domainError('publish.connection_kind_missing',
+        'A packaged connection names a kind whose definition is not in the package.');
+    }
+  }
+  /* Every kind a contract's connection selections name has to be there too,
+     or the application would be reading a contract clause about nothing. */
+  for (const selection of packagedContractKinds(workAbs)) {
+    if (!kindIds.has(selection)) {
+      throw domainError('publish.connection_kind_missing',
+        `The contract asks for the connection kind "${selection}", which is not in the package.`);
     }
   }
 

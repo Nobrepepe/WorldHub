@@ -4,5 +4,6 @@
   "protocolVersion": 2,
   "readableProtocolVersions": [1, 2],
   "contractFormatVersion": 1,
-  "vocabularyVersion": 1
+  "vocabularyVersion": 1,
+  "connectionKindsVersion": 1
 }

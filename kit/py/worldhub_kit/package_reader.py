@@ -128,6 +128,65 @@ class PackageInfo:
                     return set_id
         return None
 
+    # ---- connections ----
+
+    def connection_kinds_by_id(self) -> dict[str, dict]:
+        """Every published connection kind, by its stable id."""
+        return {kind["id"]: kind for kind in self.connection_kinds}
+
+    def connection_label(self, connection: dict, direction: str) -> str:
+        """The label one end of a connection wears.
+
+        The kind is asked first, so a rename in the authoring library reaches
+        every connection that uses it; the record's own label is the fallback,
+        which is all a package published before kinds existed carries.
+        """
+        kind = self.connection_kinds_by_id().get(connection.get("kindId"))
+        if kind is None:
+            return connection.get("inverseLabel", "") if direction == "to" else connection.get("label", "")
+        if kind.get("symmetric"):
+            return kind["forwardLabel"]
+        if direction == "to":
+            return connection.get("inverseLabel") or kind["inverseLabel"]
+        return connection.get("label") or kind["forwardLabel"]
+
+    def connections_for(self, entity_id: str) -> list[dict]:
+        """Every connection touching a record, written from that record's side.
+
+        ``direction`` is "from" when the record is the connection's source and
+        "to" when it is the target; ``otherId`` is always the record at the
+        other end, so a caller never has to work out which column it occupies.
+        """
+        found = []
+        for connection in self.relationships:
+            if entity_id not in (connection["sourceId"], connection["targetId"]):
+                continue
+            from_here = connection["sourceId"] == entity_id
+            direction = "from" if from_here else "to"
+            found.append({
+                **connection,
+                "direction": direction,
+                "otherId": connection["targetId"] if from_here else connection["sourceId"],
+                "label": self.connection_label(connection, direction),
+            })
+        return found
+
+    def connections_from(self, entity_id: str, kind_id: str | None = None) -> list[dict]:
+        """Connections running out of a record, optionally of one kind only."""
+        return [
+            connection for connection in self.relationships
+            if connection["sourceId"] == entity_id
+            and (kind_id is None or kind_id in (connection.get("kindId"), connection.get("type")))
+        ]
+
+    def connections_to(self, entity_id: str, kind_id: str | None = None) -> list[dict]:
+        """Connections running into a record, optionally of one kind only."""
+        return [
+            connection for connection in self.relationships
+            if connection["targetId"] == entity_id
+            and (kind_id is None or kind_id in (connection.get("kindId"), connection.get("type")))
+        ]
+
     def asset_file(self, asset_id: str, preferred_recipes: list[str] | None = None) -> dict | None:
         """The best index entry for an asset given a recipe preference order."""
         entries = self.asset_entries(asset_id)
@@ -173,6 +232,23 @@ def _read_json(root: Path, package_path: str):
     path = root / Path(*package_path.split("/"))
     if not path.is_file():
         raise PackageError(f"The package is missing {package_path}.")
+    try:
+        return json.loads(path.read_text("utf-8"))
+    except json.JSONDecodeError as error:
+        raise PackageError(f"The package file {package_path} is not valid JSON.") from error
+
+
+def _read_json_optional(root: Path, package_path: str, fallback):
+    """Read a catalog file a package may predate.
+
+    ``catalog/connection-kinds.json`` arrived after Protocol 1 and part-way
+    through Protocol 2, so its absence is a fact about when a package was
+    published, not a fault. A package that has it is verified against it; one
+    that has not still loads, and its connections read the way they always did.
+    """
+    path = root / Path(*package_path.split("/"))
+    if not path.is_file():
+        return fallback
     try:
         return json.loads(path.read_text("utf-8"))
     except json.JSONDecodeError as error:
@@ -294,15 +370,21 @@ def load_package(
     worlds = _read_json(root, "catalog/worlds.json")
     characters = _read_json(root, "catalog/characters.json")
     relationships = _read_json(root, "catalog/relationships.json")
+    connection_kinds = _read_json_optional(root, "catalog/connection-kinds.json", [])
     documents = _read_json(root, "catalog/documents.json")
     tags = _read_json(root, "catalog/tags.json")
     asset_index = _read_json(root, "assets/index.json")
     content = _read_json(root, "production/content.json")
 
     entity_ids = {entity["id"] for entity in entities}
+    kind_ids = {kind["id"] for kind in connection_kinds}
     for relationship in relationships:
         if relationship["sourceId"] not in entity_ids or relationship["targetId"] not in entity_ids:
             raise PackageError("A packaged relationship references a missing record.")
+        # Only when the package claims to carry kinds at all: a connection
+        # whose kind is missing would arrive as a label with nothing behind it.
+        if connection_kinds and "kindId" in relationship and relationship["kindId"] not in kind_ids:
+            raise PackageError("A packaged connection names a kind that is not in the package.")
     for document in documents:
         for entity_id in _as_list(document.get("entityIds")):
             if entity_id not in entity_ids:
@@ -340,7 +422,8 @@ def load_package(
     return PackageInfo(
         root=root, manifest=manifest, contract=contract, content=content,
         entities=entities, worlds=worlds, characters=characters,
-        relationships=relationships, documents=documents, asset_index=asset_index,
+        relationships=relationships, connection_kinds=connection_kinds,
+        documents=documents, asset_index=asset_index,
         checksums=checksums, tags=tags, protocol_version=protocol_version,
         renamed_from=renames,
     )

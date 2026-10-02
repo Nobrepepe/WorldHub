@@ -156,7 +156,7 @@
           "required": true,
           "minItems": 4,
           "maxItems": 4,
-          "hint": "The game decides which campaign nodes hide them.",
+          "hint": "The game decides which campaign nodes hide them. Each piece uncovers a quarter of the relic art above \u2014 they are not illustrated separately.",
           "fields": [
             {
               "id": "piece_name",
@@ -171,18 +171,6 @@
               "type": "multilineText",
               "required": false,
               "maxLength": 600
-            },
-            {
-              "id": "piece_art",
-              "label": "Piece art",
-              "type": "assetRef",
-              "required": false,
-              "assetKinds": [
-                "image"
-              ],
-              "recipes": [
-                "square"
-              ]
             }
           ]
         },
@@ -259,6 +247,22 @@
           "min": 0,
           "max": 3,
           "hint": "One image per campaign chapter, in chapter order."
+        },
+        {
+          "id": "hc_relic_art",
+          "label": "Relic \u2014 the whole object",
+          "kinds": [
+            "image"
+          ],
+          "roles": [
+            "object.icon"
+          ],
+          "recipes": [
+            "square"
+          ],
+          "min": 0,
+          "max": 1,
+          "hint": "One square image of the relic entire. The Mastery track shows a quarter of it per recovered piece, so keep the subject clear of a narrow band around the middle cross \u2014 two seams run through it until the relic is bound."
         }
       ]
     },
@@ -303,16 +307,6 @@
               "label": "Free Spirit"
             }
           ]
-        },
-        {
-          "id": "hc_faction",
-          "label": "Faction",
-          "type": "entityRef",
-          "entityTypes": [
-            "group"
-          ],
-          "required": false,
-          "hint": "A group this character belongs to. Select the same group under Factions for it to grant party synergy; how much it is worth is the game's to tune."
         },
         {
           "id": "hc_equipment",
@@ -421,7 +415,7 @@
         "group"
       ],
       "min": 0,
-      "hint": "Groups whose members work well together. Name and description come from the canonical group profile; a character joins one by selecting it as their Faction. Selecting no groups is fine \u2014 the game simply has no faction synergy.",
+      "hint": "Groups whose members work well together. Name and description come from the canonical group profile, and who belongs to one is a canonical connection in World Hub rather than anything typed here. Selecting no groups is fine \u2014 the game simply has no faction synergy.",
       "fields": [
         {
           "id": "hc_faction_explanation",
@@ -432,6 +426,20 @@
           "hint": "Shown when a party lights this faction's synergy. Defaults to the group's own summary."
         }
       ]
+    }
+  ],
+  "connectionSelections": [
+    {
+      "id": "hc_faction_membership",
+      "label": "Faction memberships",
+      "kinds": [
+        "member_of"
+      ],
+      "sourceSelection": "hc_characters",
+      "targetSelection": "hc_factions",
+      "minPerSource": 0,
+      "maxPerSource": 1,
+      "hint": "Membership is canonical fiction, recorded in World Hub between a character and a group. World Hub lets a character belong to several groups; this game shows one faction, so it asks for at most one of them to be selected under Factions \u2014 that restriction is the game's, not the canon's."
     }
   ],
   "assetSets": [

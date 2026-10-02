@@ -72,26 +72,38 @@ export function syncAssetIndex(library, id) {
     .run('asset', id, 'asset', row.title, body);
 }
 
-/** Reindex one relationship's labels and description. */
-export function syncRelationshipIndex(library, id) {
+/**
+ * Reindex one connection.
+ *
+ * The searchable text is the kind's own labels rather than text retyped on
+ * the record, so renaming a kind reaches every connection that uses it —
+ * with any per-record override still indexed alongside, because an override
+ * exists precisely when the record says something its kind does not.
+ */
+export function syncConnectionIndex(library, id) {
   const db = library.db;
-  deleteSubject(db, 'relationship', id);
+  deleteSubject(db, 'connection', id);
   const row = db.prepare(`
-    SELECT r.*, s.name AS source_name, t.name AS target_name
-    FROM relationships r JOIN entities s ON s.id = r.source_id JOIN entities t ON t.id = r.target_id
-    WHERE r.id = ?
+    SELECT c.*, k.forward_label, k.inverse_label, s.name AS source_name, t.name AS target_name
+    FROM connections c
+    JOIN connection_kinds k ON k.id = c.kind_id
+    JOIN entities s ON s.id = c.source_id
+    JOIN entities t ON t.id = c.target_id
+    WHERE c.id = ?
   `).get(id);
   if (!row || row.status === 'archived') return;
-  const title = `${row.source_name} — ${row.label || row.rel_type} — ${row.target_name}`;
-  const body = [row.rel_type, row.label, row.inverse_label, row.description].filter(Boolean).join('\n');
+  const label = row.label_override || row.forward_label;
+  const title = `${row.source_name} — ${label} — ${row.target_name}`;
+  const body = [row.kind_id, label, row.inverse_label_override || row.inverse_label, row.description]
+    .filter(Boolean).join('\n');
   db.prepare('INSERT INTO search_index (subject_type, subject_id, facet, title, body) VALUES (?, ?, ?, ?, ?)')
-    .run('relationship', id, 'relationship', title, body);
+    .run('connection', id, 'connection', title, body);
 }
 
 /** Drop and repopulate the whole index from source tables. */
 export function rebuildSearchIndex(library) {
   const db = library.db;
-  const counts = { entities: 0, documents: 0, assets: 0, relationships: 0 };
+  const counts = { entities: 0, documents: 0, assets: 0, connections: 0 };
   const rebuild = db.transaction(() => {
     db.prepare('DELETE FROM search_index').run();
     for (const row of db.prepare('SELECT id FROM entities').all()) {
@@ -106,9 +118,9 @@ export function rebuildSearchIndex(library) {
       syncAssetIndex(library, row.id);
       counts.assets++;
     }
-    for (const row of db.prepare('SELECT id FROM relationships').all()) {
-      syncRelationshipIndex(library, row.id);
-      counts.relationships++;
+    for (const row of db.prepare('SELECT id FROM connections').all()) {
+      syncConnectionIndex(library, row.id);
+      counts.connections++;
     }
   });
   rebuild();
@@ -167,7 +179,7 @@ export function searchLibrary(library, { query, types = null, worldId = null, ta
     if (results.length >= limit) break;
   }
 
-  const order = ['world', 'character', 'entry', 'document', 'asset', 'relationship'];
+  const order = ['world', 'character', 'entry', 'document', 'asset', 'connection'];
   const groups = [];
   for (const group of order) {
     const items = results.filter((r) => r.group === group);
@@ -218,15 +230,17 @@ function enrich(db, row) {
     const roles = db.prepare('SELECT DISTINCT role FROM asset_links WHERE asset_id = ?').all(row.subject_id).map((r) => r.role);
     return { ...base, group: 'asset', title: asset.title, kind: asset.kind, status: asset.status, roles, worldId: worldOfLinks(db, links), updatedAt: asset.updated_at, href: `/asset/${row.subject_id}` };
   }
-  if (row.subject_type === 'relationship') {
-    const rel = db.prepare(`
-      SELECT r.status, r.updated_at, s.world_id AS sw, s.type AS st, s.id AS sid, t.world_id AS tw, t.type AS tt, t.id AS tid
-      FROM relationships r JOIN entities s ON s.id = r.source_id JOIN entities t ON t.id = r.target_id
-      WHERE r.id = ?
+  if (row.subject_type === 'connection') {
+    const connection = db.prepare(`
+      SELECT c.status, c.updated_at, s.world_id AS sw, s.type AS st, s.id AS sid, t.world_id AS tw, t.type AS tt, t.id AS tid
+      FROM connections c JOIN entities s ON s.id = c.source_id JOIN entities t ON t.id = c.target_id
+      WHERE c.id = ?
     `).get(row.subject_id);
-    if (!rel) return null;
-    const worldId = rel.st === 'world' ? rel.sid : rel.tt === 'world' ? rel.tid : (rel.sw ?? rel.tw);
-    return { ...base, group: 'relationship', status: rel.status, worldId, updatedAt: rel.updated_at, href: '/relationships' };
+    if (!connection) return null;
+    const worldId = connection.st === 'world' ? connection.sid
+      : connection.tt === 'world' ? connection.tid
+        : (connection.sw ?? connection.tw);
+    return { ...base, group: 'connection', status: connection.status, worldId, updatedAt: connection.updated_at, href: '/connections' };
   }
   return null;
 }

@@ -7,7 +7,7 @@ import { el } from './dom.js';
 
 const stack = [];
 
-export function openOverlay(buildContent, { wide = false, label = 'Dialog' } = {}) {
+export function openOverlay(buildContent, { wide = false, drawer = false, label = 'Dialog' } = {}) {
   const host = document.getElementById('overlays');
   const previousFocus = document.activeElement;
 
@@ -23,13 +23,16 @@ export function openOverlay(buildContent, { wide = false, label = 'Dialog' } = {
   };
 
   const overlay = el('div', {
-    class: `overlay${wide ? ' overlay-wide' : ''}`,
+    class: `overlay${wide ? ' overlay-wide' : ''}${drawer ? ' overlay-drawer' : ''}`,
     role: 'dialog',
     'aria-modal': 'true',
     'aria-label': label,
     tabindex: '-1',
   });
-  const backdrop = el('div', { class: 'overlay-backdrop', onclick: (e) => { if (e.target === backdrop) close(undefined); } }, overlay);
+  const backdrop = el('div', {
+    class: `overlay-backdrop${drawer ? ' drawer-backdrop' : ''}`,
+    onclick: (e) => { if (e.target === backdrop) close(undefined); },
+  }, overlay);
 
   const content = buildContent(close);
   overlay.append(content);
@@ -51,6 +54,18 @@ export function openOverlay(buildContent, { wide = false, label = 'Dialog' } = {
   const promise = new Promise((resolve) => { entry.resolve = resolve; });
   stack.push(entry);
   return { promise, close };
+}
+
+/**
+ * A working layer anchored to the side of the window rather than its middle,
+ * so the record being worked on stays visible beside it.
+ *
+ * It is the same overlay underneath — one stack, one focus trap, one Escape —
+ * because a second implementation of those is how a layer comes to trap focus
+ * on one screen and not on another.
+ */
+export function openDrawer(buildContent, { label = 'Drawer' } = {}) {
+  return openOverlay(buildContent, { drawer: true, label });
 }
 
 export function closeTopOverlay() {

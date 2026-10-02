@@ -16,7 +16,9 @@
     "dist:linux": "electron-builder --linux AppImage",
     "dist:win": "electron-builder --win nsis",
     "postinstall": "electron-builder install-app-deps",
-    "check:consumers": "node scripts/check-consumers.mjs"
+    "check:consumers": "node scripts/check-consumers.mjs",
+    "app:install": "./packaging/install-desktop-entry.sh",
+    "icon:build": "node scripts/build-icon.mjs"
   },
   "build": {
     "appId": "dev.felipenobre.worldhub",
@@ -36,7 +38,17 @@
     },
     "linux": {
       "target": "AppImage",
-      "category": "Office"
+      "category": "Office",
+      "icon": "assets/icon/world-hub.png",
+      "desktop": {
+        "entry": {
+          "Name": "World Hub",
+          "GenericName": "World Archive",
+          "Comment": "Local-first archive for fictional worlds, characters, documents and artwork",
+          "Keywords": "world;worlds;character;characters;archive;library;lore;writing;publishing;",
+          "StartupWMClass": "world-hub"
+        }
+      }
     },
     "win": {
       "target": "nsis"

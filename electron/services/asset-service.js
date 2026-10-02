@@ -436,7 +436,21 @@ function renditionFingerprint(blobHash, recipe, crop) {
  * outputs from older crop fingerprints are removed. The original is
  * never modified.
  */
-export async function generateRendition(library, versionId, recipeId) {
+/* One rendering per version and recipe at a time: two screens asking for
+   the same rendition together share the work instead of racing to write
+   — and then clean up — the same file. */
+const renditionsInFlight = new Map();
+
+export function generateRendition(library, versionId, recipeId) {
+  const key = `${library.root}\0${versionId}\0${recipeId}`;
+  const running = renditionsInFlight.get(key);
+  if (running) return running;
+  const job = renderRendition(library, versionId, recipeId).finally(() => renditionsInFlight.delete(key));
+  renditionsInFlight.set(key, job);
+  return job;
+}
+
+async function renderRendition(library, versionId, recipeId) {
   const db = library.db;
   const version = db.prepare(`
     SELECT v.*, b.path AS blob_path, b.mime, b.hash, b.width, b.height
@@ -486,7 +500,10 @@ export async function generateRendition(library, versionId, recipeId) {
     // Cache invalidation: outputs for older fingerprints are stale.
     const stale = db.prepare('SELECT * FROM generated_renditions WHERE version_id = ? AND recipe_id = ?').all(versionId, recipeId);
     for (const old of stale) {
-      try { fs.rmSync(resolveInsideNoSymlink(library.root, old.path), { force: true }); } catch { /* best effort */ }
+      // A row for the same fingerprint names the file just written.
+      if (old.path !== relPath) {
+        try { fs.rmSync(resolveInsideNoSymlink(library.root, old.path), { force: true }); } catch { /* best effort */ }
+      }
       db.prepare('DELETE FROM generated_renditions WHERE id = ?').run(old.id);
     }
     db.prepare(`

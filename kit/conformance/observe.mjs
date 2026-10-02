@@ -36,6 +36,8 @@ function observe() {
       documents: pkg.documents.length,
       assetIndex: pkg.assetIndex.length,
       tags: pkg.tags.length,
+      connections: pkg.relationships.length,
+      connectionKinds: pkg.connectionKinds.length,
     },
     entityIds: pkg.entities.map((entity) => entity.id).sort(),
     sets: setIds.map((setId) => ({ setId, recipes: pkg.recipesFor(setId) })),
@@ -43,6 +45,27 @@ function observe() {
       'character.portrait', 'character.tile', 'character.full_body',
       'character.collectible', 'character.stamp', 'world.cover', 'scene.key_art',
     ].map((role) => ({ role, setId: pkg.setForRole(role) })),
+    /* every connection read the way an application would read it, from both
+       ends, so the two readers have to agree about labels and direction and
+       not merely about how many rows there are */
+    connectionKindIds: pkg.connectionKinds.map((kind) => kind.id).sort(),
+    connections: [...pkg.relationships]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((connection) => ({
+        id: connection.id,
+        kindId: connection.kindId ?? null,
+        type: connection.type,
+        labelFrom: pkg.connectionLabel(connection, 'from'),
+        labelTo: pkg.connectionLabel(connection, 'to'),
+      })),
+    connectedEntities: [...new Set(pkg.relationships.flatMap((c) => [c.sourceId, c.targetId]))]
+      .sort()
+      .map((entityId) => ({
+        entityId,
+        holds: pkg.connectionsFor(entityId).map((c) => `${c.direction}:${c.otherId}:${c.label}`).sort(),
+        outbound: pkg.connectionsFrom(entityId).length,
+        inbound: pkg.connectionsTo(entityId).length,
+      })),
     /* every asset resolved the way an application would resolve it */
     resolved: [...new Set(pkg.assetIndex.map((entry) => entry.assetId))].sort().map((assetId) => {
       const entry = pkg.assetIndex.find((candidate) => candidate.assetId === assetId);

@@ -64,7 +64,7 @@ function plannedFiles(runtime) {
       return entry.isDirectory() ? walk(`${relDir}/${entry.name}`) : [`${relDir}/${entry.name}`];
     });
   };
-  const files = ['kit.json', 'vocabulary.json', 'CONSUMER_GUIDE.md']
+  const files = ['kit.json', 'vocabulary.json', 'connection-kinds.json', 'CONSUMER_GUIDE.md']
     .filter((name) => fs.existsSync(path.join(KIT, name)));
   files.push(...walk(runtime === 'py' ? 'py' : 'js'));
   if (runtime === 'py') files.push('js/verify.mjs');

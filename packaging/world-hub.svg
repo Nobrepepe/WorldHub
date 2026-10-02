@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#241d17"/>
+      <stop offset="1" stop-color="#12100f"/>
+    </linearGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6cd85"/>
+      <stop offset="1" stop-color="#e9a94f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#e9a94f" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#e9a94f" stop-opacity="0"/>
+    </radialGradient>
+    <!-- The shelf is a rule that fades before its ends, as rules do in the app. -->
+    <linearGradient id="shelf" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0.00" stop-color="#f4ece1" stop-opacity="0"/>
+      <stop offset="0.18" stop-color="#f4ece1" stop-opacity="0.55"/>
+      <stop offset="0.50" stop-color="#f4ece1" stop-opacity="0.72"/>
+      <stop offset="0.82" stop-color="#f4ece1" stop-opacity="0.55"/>
+      <stop offset="1.00" stop-color="#f4ece1" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- plate -->
+  <rect width="512" height="512" rx="112" fill="url(#plate)"/>
+  <rect x="3" y="3" width="506" height="506" rx="110" fill="none"
+        stroke="#f4ece1" stroke-opacity="0.10" stroke-width="6"/>
+
+  <!-- warm light held inside the archive -->
+  <ellipse cx="256" cy="288" rx="208" ry="168" fill="url(#glow)"/>
+
+  <!-- the shelf and the volumes standing on it -->
+  <g>
+    <rect x="88"  y="214" width="54" height="184" rx="7" fill="#f4ece1" fill-opacity="0.30"/>
+    <rect x="150" y="182" width="44" height="216" rx="7" fill="#f4ece1" fill-opacity="0.19"/>
+
+    <!-- the one amber volume: the world being kept -->
+    <rect x="202" y="152" width="72" height="246" rx="9" fill="url(#brass)"/>
+    <g fill="none" stroke="#17120f" stroke-opacity="0.72" stroke-width="7" stroke-linecap="round">
+      <circle cx="238" cy="212" r="25"/>
+      <ellipse cx="238" cy="212" rx="10.5" ry="25"/>
+      <path d="M213 212 H263"/>
+    </g>
+    <rect x="214" y="280" width="48" height="10" rx="5" fill="#17120f" fill-opacity="0.52"/>
+
+    <rect x="282" y="196" width="48" height="202" rx="7" fill="#f4ece1" fill-opacity="0.24"/>
+    <!-- one volume leans, the way a shelf in use always has one -->
+    <rect x="338" y="222" width="46" height="176" rx="7" fill="#f4ece1" fill-opacity="0.16"
+          transform="rotate(15 338 398)"/>
+  </g>
+
+  <rect x="64" y="398" width="384" height="15" rx="7.5" fill="url(#shelf)"/>
+</svg>

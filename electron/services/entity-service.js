@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { domainError } from './errors.js';
 import { nowIso, inTransaction } from './database-service.js';
 import { recordActivity } from './activity-service.js';
-import { syncEntityIndex, syncDocumentIndex, syncAssetIndex, removeFromIndex, syncRelationshipIndex } from './search-service.js';
+import { syncEntityIndex, syncDocumentIndex, syncAssetIndex } from './search-service.js';
 import { slugify } from './paths.js';
 import { assetDisplayUrl, generateRendition } from './asset-service.js';
 
@@ -277,14 +277,16 @@ export function entityUsage(library, id) {
     JOIN document_links l ON l.document_id = d.id
     WHERE l.entity_id = ? ORDER BY d.title COLLATE NOCASE
   `).all(id);
-  const relationships = db.prepare(`
-    SELECT r.id, r.label, r.rel_type, r.source_id, r.target_id,
-           s.name AS source_name, t.name AS target_name
-    FROM relationships r
-    JOIN entities s ON s.id = r.source_id
-    JOIN entities t ON t.id = r.target_id
-    WHERE r.source_id = ? OR r.target_id = ?
-    ORDER BY r.position
+  const connections = db.prepare(`
+    SELECT c.id, c.kind_id AS kindId, c.source_id AS sourceId, c.target_id AS targetId,
+           COALESCE(NULLIF(c.label_override, ''), k.forward_label) AS label,
+           k.category, s.name AS sourceName, t.name AS targetName
+    FROM connections c
+    JOIN connection_kinds k ON k.id = c.kind_id
+    JOIN entities s ON s.id = c.source_id
+    JOIN entities t ON t.id = c.target_id
+    WHERE c.source_id = ? OR c.target_id = ?
+    ORDER BY c.position
   `).all(id, id);
   const assets = db.prepare(`
     SELECT a.id, a.title, a.kind, l.role FROM assets a
@@ -300,7 +302,7 @@ export function entityUsage(library, id) {
   const children = db.prepare(`
     SELECT id, type, name, status FROM entities WHERE world_id = ? ORDER BY name COLLATE NOCASE
   `).all(id);
-  return { documents, relationships, assets, productions, children };
+  return { documents, connections, assets, productions, children };
 }
 
 /** Archive an entity. The caller must show entityUsage() first. */
@@ -313,112 +315,6 @@ export function restoreEntity(library, id) {
   const row = db.prepare('SELECT status FROM entities WHERE id = ?').get(id);
   if (!row) throw domainError('entity.missing', 'That record no longer exists.');
   return updateEntity(library, id, { status: 'draft' });
-}
-
-/* ---------------- relationships ---------------- */
-
-export function createRelationship(library, { sourceId, targetId, relType, label = '', description = '', inverseLabel = '' }) {
-  const db = library.db;
-  if (sourceId === targetId) throw domainError('relationship.self', 'A record cannot relate to itself.');
-  for (const endpoint of [sourceId, targetId]) {
-    if (!db.prepare('SELECT id FROM entities WHERE id = ?').get(endpoint)) {
-      throw domainError('entity.missing', 'One side of the relationship no longer exists.');
-    }
-  }
-  const id = crypto.randomUUID();
-  const now = nowIso();
-  const position = (db.prepare('SELECT MAX(position) p FROM relationships WHERE source_id = ?').get(sourceId)?.p ?? -1) + 1;
-  inTransaction(db, () => {
-    db.prepare(`
-      INSERT INTO relationships (id, source_id, target_id, rel_type, label, description, inverse_label, position, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, sourceId, targetId, relType, label, description, inverseLabel, position, now, now);
-    recordActivity(db, 'relationship.created', 'relationship', id, relType);
-    syncRelationshipIndex(library, id);
-  });
-  return getRelationship(library, id);
-}
-
-export function getRelationship(library, id) {
-  const row = library.db.prepare(`
-    SELECT r.*, s.name AS source_name, s.type AS source_type, t.name AS target_name, t.type AS target_type
-    FROM relationships r
-    JOIN entities s ON s.id = r.source_id
-    JOIN entities t ON t.id = r.target_id
-    WHERE r.id = ?
-  `).get(id);
-  if (!row) throw domainError('relationship.missing', 'That relationship no longer exists.');
-  return relationshipView(row);
-}
-
-function relationshipView(row) {
-  return {
-    id: row.id,
-    sourceId: row.source_id,
-    targetId: row.target_id,
-    sourceName: row.source_name,
-    targetName: row.target_name,
-    sourceType: row.source_type,
-    targetType: row.target_type,
-    relType: row.rel_type,
-    label: row.label,
-    description: row.description,
-    inverseLabel: row.inverse_label,
-    position: row.position,
-    status: row.status,
-  };
-}
-
-export function updateRelationship(library, id, patch) {
-  const db = library.db;
-  const row = db.prepare('SELECT * FROM relationships WHERE id = ?').get(id);
-  if (!row) throw domainError('relationship.missing', 'That relationship no longer exists.');
-  const fields = { rel_type: patch.relType, label: patch.label, description: patch.description, inverse_label: patch.inverseLabel, position: patch.position, status: patch.status };
-  const sets = [];
-  const values = [];
-  for (const [column, value] of Object.entries(fields)) {
-    if (value !== undefined) { sets.push(`${column} = ?`); values.push(value); }
-  }
-  if (sets.length > 0) {
-    inTransaction(db, () => {
-      db.prepare(`UPDATE relationships SET ${sets.join(', ')}, updated_at = ? WHERE id = ?`).run(...values, nowIso(), id);
-      syncRelationshipIndex(library, id);
-    });
-  }
-  return getRelationship(library, id);
-}
-
-export function deleteRelationship(library, id) {
-  const db = library.db;
-  inTransaction(db, () => {
-    db.prepare('DELETE FROM relationships WHERE id = ?').run(id);
-    removeFromIndex(library, 'relationship', id);
-    recordActivity(db, 'relationship.deleted', 'relationship', id);
-  });
-  return { deleted: true };
-}
-
-export function listRelationships(library, { entityId, relType, worldId, limit = 500 } = {}) {
-  const db = library.db;
-  const where = [];
-  const args = [];
-  if (entityId) { where.push('(r.source_id = ? OR r.target_id = ?)'); args.push(entityId, entityId); }
-  if (relType) { where.push('r.rel_type = ?'); args.push(relType); }
-  if (worldId) { where.push('(s.world_id = ? OR t.world_id = ? OR s.id = ? OR t.id = ?)'); args.push(worldId, worldId, worldId, worldId); }
-  const rows = db.prepare(`
-    SELECT r.*, s.name AS source_name, s.type AS source_type, t.name AS target_name, t.type AS target_type
-    FROM relationships r
-    JOIN entities s ON s.id = r.source_id
-    JOIN entities t ON t.id = r.target_id
-    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-    ORDER BY r.position, r.created_at
-    LIMIT ?
-  `).all(...args, limit);
-  return rows.map(relationshipView);
-}
-
-export function listRelationshipTypes(library) {
-  return library.db.prepare('SELECT DISTINCT rel_type FROM relationships ORDER BY rel_type').all().map((r) => r.rel_type);
 }
 
 /* ---------------- tags ---------------- */

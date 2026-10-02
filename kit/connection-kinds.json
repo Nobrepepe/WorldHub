@@ -1,0 +1,197 @@
+{
+  "$comment": "The built-in connection kinds World Hub publishes under. This file is the source: migration 012 seeds a frozen copy of it, tests/vocabulary.test.mjs asserts the rows that migration creates still match what is written here, and the consumer kit ships it so an application can read a canonical fact without hard-coding a label. A package also carries catalog/connection-kinds.json describing every kind it actually uses, built-in and custom alike, so a setting-specific kind needs no consumer change at all. Bump connectionKindsVersion whenever a kind is renamed or retired, and add the new kind in a new numbered migration rather than editing 012 — a migration that seeded from this file would seed different rows on replay.",
+  "connectionKindsVersion": 1,
+
+  "categories": [
+    { "id": "social", "label": "People", "section": "People" },
+    { "id": "affiliation", "label": "Affiliations", "section": "Affiliations" },
+    { "id": "place", "label": "Places", "section": "Places" },
+    { "id": "identity", "label": "Identity", "section": "Identity" },
+    { "id": "ownership", "label": "Objects", "section": "Objects" },
+    { "id": "participation", "label": "Events", "section": "Events" },
+    { "id": "organization", "label": "Organizations", "section": "Groups" },
+    { "id": "subject", "label": "Subjects", "section": "Subjects" },
+    { "id": "legacy", "label": "Older connections", "section": "Other connections" }
+  ],
+
+  "$comment_kinds": "forwardLabel and forwardSection are what the source record's own page shows; inverseLabel and inverseSection are what the counterpart's page shows. A symmetric kind reads the same from both sides. `sentence` is the fact stated plainly, used by the authoring drawer so an author confirms a sentence rather than a direction. `pairs` are the ordered (source type, target type) combinations the kind allows — the orientation of a new connection is read from here, never chosen by hand.",
+
+  "kinds": [
+    { "id": "friend_of", "category": "social", "symmetric": true,
+      "forwardLabel": "Friend", "inverseLabel": "Friend",
+      "sentence": "{source} and {target} are friends.",
+      "pairs": [["character", "character"]] },
+
+    { "id": "rival_of", "category": "social", "symmetric": true,
+      "forwardLabel": "Rival", "inverseLabel": "Rival",
+      "sentence": "{source} and {target} are rivals.",
+      "pairs": [["character", "character"]] },
+
+    { "id": "sibling_of", "category": "social", "symmetric": true,
+      "forwardLabel": "Sibling", "inverseLabel": "Sibling",
+      "sentence": "{source} and {target} are siblings.",
+      "pairs": [["character", "character"]] },
+
+    { "id": "partner_of", "category": "social", "symmetric": true,
+      "forwardLabel": "Partner", "inverseLabel": "Partner",
+      "sentence": "{source} and {target} are partners.",
+      "pairs": [["character", "character"]] },
+
+    { "id": "parent_of", "category": "social", "symmetric": false,
+      "forwardLabel": "Parent", "inverseLabel": "Child",
+      "sentence": "{source} is the parent of {target}.",
+      "pairs": [["character", "character"]] },
+
+    { "id": "mentor_of", "category": "social", "symmetric": false,
+      "forwardLabel": "Mentor", "inverseLabel": "Student",
+      "sentence": "{source} is the mentor of {target}.",
+      "pairs": [["character", "character"]] },
+
+    { "id": "member_of", "category": "affiliation", "symmetric": false,
+      "forwardLabel": "Member", "inverseLabel": "Member",
+      "inverseSection": "Members",
+      "sentence": "{source} is a member of {target}.",
+      "pairs": [["character", "group"]] },
+
+    { "id": "leads", "category": "affiliation", "symmetric": false,
+      "forwardLabel": "Leader", "inverseLabel": "Leader",
+      "inverseSection": "Leadership",
+      "sentence": "{source} leads {target}.",
+      "pairs": [["character", "group"]] },
+
+    { "id": "founded", "category": "affiliation", "symmetric": false,
+      "forwardLabel": "Founder", "inverseLabel": "Founder",
+      "inverseSection": "Leadership",
+      "sentence": "{source} founded {target}.",
+      "pairs": [["character", "group"]] },
+
+    { "id": "lives_in", "category": "place", "symmetric": false,
+      "forwardLabel": "Home", "inverseLabel": "Resident",
+      "inverseSection": "Residents",
+      "sentence": "{source} lives in {target}.",
+      "pairs": [["character", "location"]] },
+
+    { "id": "works_at", "category": "place", "symmetric": false,
+      "forwardLabel": "Workplace", "inverseLabel": "Works here",
+      "inverseSection": "Residents",
+      "sentence": "{source} works at {target}.",
+      "pairs": [["character", "location"]] },
+
+    { "id": "based_at", "category": "place", "symmetric": false,
+      "forwardLabel": "Base", "inverseLabel": "Based here",
+      "inverseSection": "Organizations present",
+      "sentence": "{source} is based at {target}.",
+      "pairs": [["character", "location"], ["group", "location"]] },
+
+    { "id": "controls", "category": "place", "symmetric": false,
+      "forwardLabel": "Controls", "inverseLabel": "Controlled by",
+      "inverseSection": "Organizations present",
+      "sentence": "{source} controls {target}.",
+      "pairs": [["group", "location"]] },
+
+    { "id": "operates_in", "category": "place", "symmetric": false,
+      "forwardLabel": "Operates in", "inverseLabel": "Operates here",
+      "inverseSection": "Organizations present",
+      "sentence": "{source} operates in {target}.",
+      "pairs": [["group", "location"]] },
+
+    { "id": "located_in", "category": "place", "symmetric": false,
+      "forwardLabel": "Inside", "inverseLabel": "Contains",
+      "forwardSection": "Part of", "inverseSection": "Places within",
+      "sentence": "{source} is inside {target}.",
+      "pairs": [["location", "location"]] },
+
+    { "id": "kept_at", "category": "place", "symmetric": false,
+      "forwardLabel": "Kept at", "inverseLabel": "Kept here",
+      "forwardSection": "Location", "inverseSection": "Objects",
+      "sentence": "{source} is kept at {target}.",
+      "pairs": [["object", "location"]] },
+
+    { "id": "belongs_to_species", "category": "identity", "symmetric": false,
+      "forwardLabel": "Species", "inverseLabel": "Character",
+      "forwardSection": "Species", "inverseSection": "Characters",
+      "sentence": "{source} belongs to the {target}.",
+      "pairs": [["character", "species"]] },
+
+    { "id": "originates_from", "category": "identity", "symmetric": false,
+      "forwardLabel": "Origin", "inverseLabel": "Origin of",
+      "forwardSection": "Places of origin", "inverseSection": "Species",
+      "sentence": "{source} originates from {target}.",
+      "pairs": [["species", "location"]] },
+
+    { "id": "owns", "category": "ownership", "symmetric": false,
+      "forwardLabel": "Owner", "inverseLabel": "Owner",
+      "inverseSection": "Owners",
+      "sentence": "{source} owns {target}.",
+      "pairs": [["character", "object"], ["group", "object"]] },
+
+    { "id": "wields", "category": "ownership", "symmetric": false,
+      "forwardLabel": "Wields", "inverseLabel": "Wielder",
+      "inverseSection": "Wielders",
+      "sentence": "{source} wields {target}.",
+      "pairs": [["character", "object"]] },
+
+    { "id": "created", "category": "ownership", "symmetric": false,
+      "forwardLabel": "Creator", "inverseLabel": "Creator",
+      "inverseSection": "Creators",
+      "sentence": "{source} created {target}.",
+      "pairs": [["character", "object"], ["group", "object"]] },
+
+    { "id": "participated_in", "category": "participation", "symmetric": false,
+      "forwardLabel": "Took part", "inverseLabel": "Participant",
+      "inverseSection": "Participants",
+      "sentence": "{source} took part in {target}.",
+      "pairs": [["character", "event"], ["group", "event"]] },
+
+    { "id": "caused", "category": "participation", "symmetric": false,
+      "forwardLabel": "Caused", "inverseLabel": "Cause",
+      "inverseSection": "Participants",
+      "sentence": "{source} caused {target}.",
+      "pairs": [["character", "event"], ["group", "event"]] },
+
+    { "id": "survived", "category": "participation", "symmetric": false,
+      "forwardLabel": "Survived", "inverseLabel": "Survivor",
+      "inverseSection": "Participants",
+      "sentence": "{source} survived {target}.",
+      "pairs": [["character", "event"]] },
+
+    { "id": "took_place_at", "category": "participation", "symmetric": false,
+      "forwardLabel": "Place", "inverseLabel": "Event",
+      "forwardSection": "Places", "inverseSection": "Events",
+      "sentence": "{source} took place at {target}.",
+      "pairs": [["event", "location"]] },
+
+    { "id": "used_in", "category": "participation", "symmetric": false,
+      "forwardLabel": "Used in", "inverseLabel": "Important object",
+      "forwardSection": "Events", "inverseSection": "Important objects",
+      "sentence": "{source} was used in {target}.",
+      "pairs": [["object", "event"]] },
+
+    { "id": "allied_with", "category": "organization", "symmetric": true,
+      "forwardLabel": "Ally", "inverseLabel": "Ally",
+      "forwardSection": "Allied groups", "inverseSection": "Allied groups",
+      "sentence": "{source} and {target} are allied.",
+      "pairs": [["group", "group"]] },
+
+    { "id": "rival_group_of", "category": "organization", "symmetric": true,
+      "forwardLabel": "Rival", "inverseLabel": "Rival",
+      "forwardSection": "Rival groups", "inverseSection": "Rival groups",
+      "sentence": "{source} and {target} are rivals.",
+      "pairs": [["group", "group"]] },
+
+    { "id": "subordinate_to", "category": "organization", "symmetric": false,
+      "forwardLabel": "Answers to", "inverseLabel": "Subordinate",
+      "forwardSection": "Parent organization", "inverseSection": "Subordinate groups",
+      "sentence": "{source} answers to {target}.",
+      "pairs": [["group", "group"]] },
+
+    { "id": "concerns", "category": "subject", "symmetric": false,
+      "forwardLabel": "Subject", "inverseLabel": "Lore",
+      "forwardSection": "Subjects", "inverseSection": "Lore",
+      "sentence": "{source} concerns {target}.",
+      "pairs": [
+        ["lore", "character"], ["lore", "group"], ["lore", "location"],
+        ["lore", "species"], ["lore", "object"], ["lore", "event"], ["lore", "lore"]
+      ] }
+  ]
+}

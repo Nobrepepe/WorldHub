@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
 import { createContract } from '../../electron/services/contract-service.js';
-import { createEntity, updateEntity, createRelationship } from '../../electron/services/entity-service.js';
+import { createEntity, updateEntity } from '../../electron/services/entity-service.js';
+import { createConnection } from '../../electron/services/connection-service.js';
 import { importAsset, setAssetLinks, addAssetVersion } from '../../electron/services/asset-service.js';
 import { createDocument } from '../../electron/services/document-service.js';
 import {
@@ -128,9 +129,7 @@ export async function buildCanon(library, { variant = 1 } = {}) {
   }
   const place = createEntity(library, { type: 'location', name: 'The Star Cage', worldId: world.id });
   updateEntity(library, place.id, { status: 'canonical', summary: 'The lattice holding the captive star.' });
-  createRelationship(library, {
-    sourceId: heroes[0].id, targetId: place.id, relType: 'guardian', label: 'guards', inverseLabel: 'guarded by',
-  });
+  createConnection(library, { kindId: 'based_at', entityId: heroes[0].id, counterpartId: place.id });
   const lore = createDocument(library, {
     title: 'The Emberfall Accord',
     entityIds: [world.id, heroes[0].id],
@@ -321,7 +320,9 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
     heroes.push(extra);
   }
 
-  // Factions are canonical groups now, not ids typed into a production.
+  // Factions are canonical groups, and belonging to one is a canonical
+  // connection — the game reads it through the contract's connection
+  // selection rather than from a value repeated on every character.
   const emberguard = createEntity(library, { type: 'group', name: 'Emberguard', worldId: world.id });
   updateEntity(library, emberguard.id, { status: 'canonical', summary: 'Sworn to the captive star.' });
 
@@ -353,7 +354,7 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
 
   /* world selection */
   setSelection(library, production.id, 'hc_worlds', [world.id]);
-  const relicArt = await importImage(library, 'Relic ember shard', { seed: 3200 });
+  const relicArt = await importImage(library, 'Relic ember shard', { entityId: world.id, role: 'object.icon', seed: 3200 });
   const cosmeticArt = await importImage(library, 'Vigil Ash cosmetic', { seed: 3500 });
   const worldValues = {
     hc_world_icon: '🔥',
@@ -366,10 +367,10 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
     hc_relic_name: 'The Star Cage',
     hc_relic_lore: 'The lattice that once held the captive star together.',
     hc_relic_pieces: [
-      { piece_name: 'North Lattice', piece_lore: 'A cooled fragment of the star.', piece_art: relicArt.id },
-      { piece_name: 'East Lattice', piece_lore: '', piece_art: null },
-      { piece_name: 'South Lattice', piece_lore: '', piece_art: null },
-      { piece_name: 'West Lattice', piece_lore: '', piece_art: null },
+      { piece_name: 'North Lattice', piece_lore: 'A cooled fragment of the star.' },
+      { piece_name: 'East Lattice', piece_lore: '' },
+      { piece_name: 'South Lattice', piece_lore: '' },
+      { piece_name: 'West Lattice', piece_lore: '' },
     ],
     // Ordered: the game decides which Mastery milestone each one lands on.
     hc_mastery_cosmetics: [
@@ -387,6 +388,7 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
     chapterArts.push(await importImage(library, `Chapter ${c} backdrop`, { entityId: world.id, role: 'world.background', seed: 3320 + c }));
   }
   setAssetSetItems(library, production.id, { slot: 'hc_chapter_art', entityId: world.id, items: items(chapterArts) });
+  setAssetSetItems(library, production.id, { slot: 'hc_relic_art', entityId: world.id, items: items([relicArt]) });
 
   /* characters — selection order is roster order */
   setSelection(library, production.id, 'hc_characters', cast.map((hero) => hero.id));
@@ -396,7 +398,6 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
     const equipArt = await importImage(library, `${hero.name} signature art`, { seed: 3400 + index });
     const values = {
       hc_archetype: archetypes[index % archetypes.length],
-      hc_faction: emberguard.id,
       hc_equipment: [
         { equip_slot: 'attire', equip_name: `${hero.name}'s Ember Cloak`, equip_art: null },
         { equip_slot: 'signature', equip_name: `${hero.name}'s Star Brand`, equip_art: equipArt.id },
@@ -405,6 +406,7 @@ export async function buildHeroCollectorProduction(library, { variant = 1 } = {}
     for (const [field, value] of Object.entries(values)) {
       setProductionValue(library, production.id, { scope: 'entity', entityId: hero.id, field, value });
     }
+    createConnection(library, { kindId: 'member_of', entityId: hero.id, counterpartId: emberguard.id });
     const portrait = await importImage(library, `${hero.name} hc tile`, { entityId: hero.id, role: 'character.tile', seed: 3600 + index * 10 + variant });
     setAssetSetItems(library, production.id, { slot: 'hc_portrait', entityId: hero.id, items: items([portrait]) });
     const fullBody = await importImage(library, `${hero.name} full body`, { entityId: hero.id, role: 'character.full_body', seed: 3700 + index * 10 });

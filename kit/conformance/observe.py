@@ -53,6 +53,8 @@ def observe(directory: str, app_type: str, vocabulary: int) -> dict:
             "documents": len(package.documents),
             "assetIndex": len(index),
             "tags": len(package.tags),
+            "connections": len(package.relationships),
+            "connectionKinds": len(package.connection_kinds),
         },
         "entityIds": sorted(entity["id"] for entity in package.entities),
         "sets": [{"setId": s, "recipes": package.recipes_for(s)} for s in set_ids],
@@ -62,6 +64,36 @@ def observe(directory: str, app_type: str, vocabulary: int) -> dict:
                 "character.portrait", "character.tile", "character.full_body",
                 "character.collectible", "character.stamp", "world.cover", "scene.key_art",
             )
+        ],
+        # Every connection read the way an application would read it, from
+        # both ends, so the two readers have to agree about labels and
+        # direction and not merely about how many rows there are.
+        "connectionKindIds": sorted(kind["id"] for kind in package.connection_kinds),
+        "connections": [
+            {
+                "id": connection["id"],
+                "kindId": connection.get("kindId"),
+                "type": connection["type"],
+                "labelFrom": package.connection_label(connection, "from"),
+                "labelTo": package.connection_label(connection, "to"),
+            }
+            for connection in sorted(package.relationships, key=lambda c: c["id"])
+        ],
+        "connectedEntities": [
+            {
+                "entityId": entity_id,
+                "holds": sorted(
+                    f"{c['direction']}:{c['otherId']}:{c['label']}"
+                    for c in package.connections_for(entity_id)
+                ),
+                "outbound": len(package.connections_from(entity_id)),
+                "inbound": len(package.connections_to(entity_id)),
+            }
+            for entity_id in sorted({
+                endpoint
+                for connection in package.relationships
+                for endpoint in (connection["sourceId"], connection["targetId"])
+            })
         ],
         "resolved": resolved,
     }

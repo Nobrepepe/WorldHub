@@ -57,7 +57,8 @@ test('publishing creates a complete verified package with checksums over every f
 
   /* structure */
   for (const expected of ['manifest.json', 'checksums.json', 'catalog/entities.json', 'catalog/worlds.json',
-    'catalog/characters.json', 'catalog/relationships.json', 'catalog/tags.json', 'catalog/documents.json',
+    'catalog/characters.json', 'catalog/relationships.json', 'catalog/connection-kinds.json',
+    'catalog/tags.json', 'catalog/documents.json',
     'production/contract.json', 'production/content.json', 'assets/index.json']) {
     assert.ok(fs.existsSync(path.join(packageDir, ...expected.split('/'))), `missing ${expected}`);
   }
@@ -139,11 +140,12 @@ test('art with transparent edges reaches the package with its transparency intac
   assert.ok(nao, 'gallery cast intact');
 });
 
-test('packages are self-contained: actual roles, no dangling profile or document references, no archived relationships', async (t) => {
+test('packages are self-contained: actual roles, no dangling profile or document references, no archived connections', async (t) => {
   const { library, root, cleanup } = await makeTestLibrary();
   t.after(cleanup);
   const { production, world, nao, bram, portraitA, doc } = await readyGallery(library);
-  const { updateEntity: update, createRelationship } = await import('../electron/services/entity-service.js');
+  const { updateEntity: update } = await import('../electron/services/entity-service.js');
+  const { createConnection } = await import('../electron/services/connection-service.js');
   const { setDocumentLinks } = await import('../electron/services/document-service.js');
 
   /* the portrait also carries a second role; only real roles export */
@@ -162,10 +164,10 @@ test('packages are self-contained: actual roles, no dangling profile or document
   const outsider = createEntity(library, { type: 'character', name: 'Outsider' });
   setDocumentLinks(library, doc.id, [nao.id, outsider.id]);
 
-  /* one live and one archived relationship */
-  createRelationship(library, { sourceId: nao.id, targetId: bram.id, relType: 'rival' });
-  const archived = createRelationship(library, { sourceId: nao.id, targetId: world.id, relType: 'exile' });
-  library.db.prepare(`UPDATE relationships SET status = 'archived' WHERE id = ?`).run(archived.id);
+  /* one live and one archived connection */
+  createConnection(library, { kindId: 'rival_of', entityId: nao.id, counterpartId: bram.id });
+  const archived = createConnection(library, { kindId: 'mentor_of', entityId: nao.id, counterpartId: bram.id });
+  library.db.prepare(`UPDATE connections SET status = 'archived' WHERE id = ?`).run(archived.id);
 
   const publication = await publishProduction(library, production.id);
   const packageDir = path.join(root, ...publication.directory.split('/'));
@@ -184,8 +186,59 @@ test('packages are self-contained: actual roles, no dangling profile or document
   assert.deepEqual(documents.find((d) => d.id === doc.id).entityIds, [nao.id], 'document links outside the snapshot are filtered');
 
   const relationships = read('catalog/relationships.json');
-  assert.ok(relationships.some((rel) => rel.type === 'rival'), 'live relationship included');
-  assert.ok(!relationships.some((rel) => rel.type === 'exile'), 'archived relationship excluded');
+  assert.ok(relationships.some((rel) => rel.type === 'rival_of'), 'live connection included');
+  assert.ok(!relationships.some((rel) => rel.type === 'mentor_of'), 'archived connection excluded');
+});
+
+test('a package carries the meaning of every connection in it, and nothing it did not select', async (t) => {
+  const { library, root, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const { production, world, nao, bram } = await readyGallery(library);
+  const { createConnection, createConnectionKind } = await import('../electron/services/connection-service.js');
+
+  /* A kind this setting invented, used between two records the gallery
+     includes; and a record it does not include, on the far end of another
+     connection of the same kind. */
+  const kind = createConnectionKind(library, {
+    category: 'social', forwardLabel: 'Sworn rival', inverseLabel: 'Sworn rival', symmetric: true,
+    sentence: '{source} and {target} are sworn rivals.',
+    pairs: [{ sourceType: 'character', targetType: 'character' }],
+  });
+  const outsider = createEntity(library, { type: 'character', name: 'Outsider', worldId: world.id });
+  createConnection(library, { kindId: kind.id, entityId: nao.id, counterpartId: bram.id });
+  createConnection(library, { kindId: kind.id, entityId: nao.id, counterpartId: outsider.id });
+
+  const publication = await publishProduction(library, production.id);
+  const packageDir = path.join(root, ...publication.directory.split('/'));
+  const read = (rel) => JSON.parse(fs.readFileSync(path.join(packageDir, ...rel.split('/')), 'utf8'));
+
+  const entityIds = new Set(read('catalog/entities.json').map((entity) => entity.id));
+  assert.equal(entityIds.has(outsider.id), false,
+    'a connection does not drag its far end into a package nobody selected it for');
+
+  const connections = read('catalog/relationships.json');
+  const sworn = connections.filter((connection) => connection.kindId === kind.id);
+  assert.equal(sworn.length, 1, 'only the connection whose both ends ship is carried');
+  assert.equal(sworn[0].type, kind.id, 'the Protocol 1 field still names the same thing');
+  assert.equal(sworn[0].label, 'Sworn rival', 'resolved from the kind, not retyped per record');
+  assert.equal(sworn[0].category, 'social');
+
+  /* Self-containment is about meaning as much as bytes: a custom kind
+     travels with its definition, so a consumer never hard-codes it. */
+  const kinds = read('catalog/connection-kinds.json');
+  const published = kinds.find((entry) => entry.id === kind.id);
+  assert.ok(published, 'the custom kind ships');
+  assert.equal(published.builtin, false);
+  assert.equal(published.symmetric, true);
+  assert.deepEqual(published.pairs, [['character', 'character']]);
+  for (const connection of connections) {
+    assert.ok(kinds.some((entry) => entry.id === connection.kindId),
+      'every packaged connection names a kind the package defines');
+  }
+
+  const manifest = read('manifest.json');
+  assert.equal(manifest.counts.connections, connections.length);
+  assert.equal(manifest.counts.connectionKinds, kinds.length);
 });
 
 test('assets and entities referenced by contract-defined values ship in the package', async (t) => {

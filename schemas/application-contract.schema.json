@@ -54,6 +54,14 @@
         "$ref": "#/$defs/entitySelection"
       }
     },
+    "connectionSelections": {
+      "type": "array",
+      "maxItems": 20,
+      "description": "Canonical connection kinds this application consumes, between records two of its entity selections already include. Optional: a contract without it is unchanged, and no connection reaches the application through it.",
+      "items": {
+        "$ref": "#/$defs/connectionSelection"
+      }
+    },
     "assetSets": {
       "type": "array",
       "maxItems": 20,
@@ -367,6 +375,58 @@
           "items": {
             "$ref": "#/$defs/assetSet"
           }
+        }
+      }
+    },
+    "connectionSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "kinds",
+        "sourceSelection",
+        "targetSelection"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "kinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "description": "Connection kind ids, as published in catalog/connection-kinds.json.",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_]{0,79}$"
+          }
+        },
+        "sourceSelection": {
+          "$ref": "#/$defs/slug",
+          "description": "The entity selection the connections run from."
+        },
+        "targetSelection": {
+          "$ref": "#/$defs/slug",
+          "description": "The entity selection they run to. A connection whose target is not selected is a warning the author can act on, never a silent traversal into the package."
+        },
+        "minPerSource": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxPerSource": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "An application restriction, not a canonical one: World Hub may allow a character in several groups while a game allows one faction."
+        },
+        "hint": {
+          "type": "string",
+          "maxLength": 500
         }
       }
     },

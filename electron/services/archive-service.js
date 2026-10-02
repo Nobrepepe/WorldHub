@@ -127,15 +127,15 @@ export function planPurge(db, { scopes = [], includePublications = false } = {})
     /* Links held by material that survives are cut, not blocked: an
        archived record that leaves takes its own references with it. */
     let cutLinks = 0;
-    let cutRelationships = 0;
+    let cutConnections = 0;
     let cutDocumentLinks = 0;
     for (const entityId of goingEntities) {
       cutLinks += db.prepare('SELECT COUNT(*) n FROM asset_links WHERE entity_id = ?').get(entityId).n;
-      cutRelationships += db.prepare('SELECT COUNT(*) n FROM relationships WHERE source_id = ? OR target_id = ?').get(entityId, entityId).n;
+      cutConnections += db.prepare('SELECT COUNT(*) n FROM connections WHERE source_id = ? OR target_id = ?').get(entityId, entityId).n;
       cutDocumentLinks += db.prepare('SELECT COUNT(*) n FROM document_links WHERE entity_id = ?').get(entityId).n;
     }
     if (cutLinks > 0) plan.consequences.push(`${cutLinks} asset link(s) to those records are cut.`);
-    if (cutRelationships > 0) plan.consequences.push(`${cutRelationships} relationship(s) touching those records are removed.`);
+    if (cutConnections > 0) plan.consequences.push(`${cutConnections} connection(s) touching those records are removed.`);
     if (cutDocumentLinks > 0) plan.consequences.push(`${cutDocumentLinks} document link(s) to those records are cut.`);
   }
 
@@ -311,7 +311,7 @@ export function purgeArchive(library, { scopes = [], includePublications = false
 
     /* entities last: by now nothing that survives is standing on them */
     for (const entity of plan.entities) {
-      db.prepare('DELETE FROM relationships WHERE source_id = ? OR target_id = ?').run(entity.id, entity.id);
+      db.prepare('DELETE FROM connections WHERE source_id = ? OR target_id = ?').run(entity.id, entity.id);
       db.prepare('DELETE FROM document_links WHERE entity_id = ?').run(entity.id);
       db.prepare('DELETE FROM asset_links WHERE entity_id = ?').run(entity.id);
       db.prepare('DELETE FROM entity_aliases WHERE entity_id = ?').run(entity.id);

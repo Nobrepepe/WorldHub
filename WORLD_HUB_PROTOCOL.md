@@ -71,6 +71,44 @@ Each selection declares `entityTypes`, count bounds (`exact`, or `min`/`max`), o
 
 Per-record field ids and asset-set ids must be unique across the **whole contract**, not just within one selection: production values and package content key them by (record, id), so a shared id from two selections would collide when the same record appears in both. Contract validation rejects shared ids.
 
+### Connection selections
+
+`connectionSelections` is optional; a contract without it is unchanged, and no
+connection reaches the application through it. Each entry names the canonical
+connection kinds the application consumes and the two entity selections they
+run between:
+
+```json
+{
+  "id": "hc_faction_membership",
+  "label": "Faction memberships",
+  "kinds": ["member_of"],
+  "sourceSelection": "hc_characters",
+  "targetSelection": "hc_factions",
+  "minPerSource": 0,
+  "maxPerSource": 1
+}
+```
+
+The point of the boundary is `maxPerSource`. Membership is canonical fiction —
+World Hub lets a character belong to several groups — while showing one faction
+is a game rule, so the game states it in its own contract rather than canon
+being narrowed to suit it.
+
+Validation splits by what it needs. Unique ids, `sourceSelection` and
+`targetSelection` naming real selections, and coherent bounds are checked from
+the document alone, so a contract file still imports with no library open.
+Whether the named kinds exist, and whether they can join the record types those
+selections allow, is checked against the library and again when a production is
+validated.
+
+A production is checked against the canonical graph: a source record whose
+connections into the target selection fall outside `minPerSource`…`maxPerSource`
+is an **error**, and a record connected to something the author has not selected
+is a **warning** naming that record, so the editor can offer to add it. Nothing
+is traversed automatically — production selection stays explicit, so choosing
+one character cannot pull most of a world into a package.
+
 ### Asset sets
 
 An asset set declares allowed `kinds`, allowed semantic `roles` (see [ASSET_ROLES.md](ASSET_ROLES.md)), required rendition `recipes` (recipe IDs, never filenames), count bounds, and optional per-item `itemFields`.
@@ -120,6 +158,7 @@ productions/<production-slug>/publications/<publication-uuid>/
 │   ├── worlds.json
 │   ├── characters.json
 │   ├── relationships.json
+│   ├── connection-kinds.json
 │   ├── tags.json
 │   └── documents.json
 ├── production/
@@ -174,7 +213,8 @@ All JSON in a package is deterministic: recursively sorted keys, stable record o
 - `entities.json` — every included record: `id`, `type`, `worldId`, `name`, `slug`, `summary`, `status`, `sortOrder`, `revision`, `aliases[]`, `tags[]`.
 - `worlds.json` — world profiles: `id`, `tagline`, `genre`, `tone`, `settingDescription`, `visualDirection`, `coverAssetId`, `backgroundAssetId`. Profile asset references are `null` unless that asset ships in this package — a package never contains dangling references.
 - `characters.json` — character profiles: `id`, `role`, `age` (text), `appearance`, `personality`, `biography`, `voice`, `portraitAssetId`, `tileAssetId` (same self-containment rule).
-- `relationships.json` — directed, non-archived records whose both endpoints are included: `id`, `sourceId`, `targetId`, `type`, `label`, `inverseLabel`, `description`, `position`.
+- `relationships.json` — canonical connections, non-archived and with both endpoints included: `id`, `sourceId`, `targetId`, `type`, `label`, `inverseLabel`, `description`, `position`, plus `kindId` and `category`. `kindId` is the stable machine name of the connection kind; `type` carries the same string, and `label`/`inverseLabel` are resolved from that kind rather than retyped per record — so a reader written before kinds existed reads exactly what it read before. The file keeps its Protocol 1 name deliberately: renaming it would break every vendored reader for no gain.
+- `connection-kinds.json` — the definition of every kind the package uses, plus any its contract names: `id`, `category`, `forwardLabel`, `inverseLabel`, `forwardSection`, `inverseSection`, `symmetric`, `builtin`, and `pairs` (the ordered `[sourceType, targetType]` combinations the kind may join). A setting-specific custom kind travels the same way as a built-in one, so a consumer never hard-codes what a kind means. Packages published before this file existed simply do not have it, and readers treat its absence as a fact about when the package was published rather than a fault.
 - `tags.json` — `id`, `name`, `group` for every tag used in the snapshot.
 - `documents.json` — `id`, `title`, `path` (inside the package), `status`, `revision`, `wordCount`, `checksum`, `entityIds[]` (filtered to records this package includes). The Markdown bodies are real files under `documents/`.
 
@@ -213,7 +253,7 @@ SHA-256 of every other file in the package, keyed by package-relative path. A pa
 
 ### Publication guarantees
 
-- Assembly happens in a temporary work area; the snapshot is verified there (manifest schema, checksums, file existence, and reference resolution — including relationship endpoints, profile art, and document links) before being moved into place in one rename.
+- Assembly happens in a temporary work area; the snapshot is verified there (manifest schema, checksums, file existence, and reference resolution — including relationship endpoints, the connection kind every connection names, profile art, and document links) before being moved into place in one rename.
 - The publication is recorded in World Hub's database first; `current.json` is replaced atomically as the very last step, so the pointer only ever names a fully recorded snapshot. If any step fails — including the pointer write itself — the previous snapshot stays active, the database is compensated, and the unreferenced package directory is removed.
 - Publications are never modified after creation and never cascade-deleted.
 
@@ -228,6 +268,8 @@ read  manifest.json                             → verify format == "world-hub-
 read  checksums.json; verify files you rely on
 read  catalog/entities.json (+ worlds/characters as needed), key records by id
 read  production/content.json                   → ordering and app-specific values
+read  catalog/relationships.json + connection-kinds.json (both optional to use)
+                                                → canonical facts between records
 for each needed image/audio:
     look up assets/index.json by (assetId, recipeId) → path
 cache by publicationId; a new publication is a new folder and a new pointer

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { domainError } from './errors.js';
 import { nowIso, inTransaction } from './database-service.js';
 import { recordActivity } from './activity-service.js';
-import { getContract, contractDrift } from './contract-service.js';
+import { getContract, contractDrift, validateContractAgainstLibrary } from './contract-service.js';
 import { validateFieldValue, countBounds } from './field-engine.js';
 import { slugify } from './paths.js';
 import { assetDisplayUrl } from './asset-service.js';
@@ -516,10 +516,78 @@ export function validateProduction(library, id) {
     });
   }
 
+  /* canonical connections this application consumes */
+  for (const issue of validateContractAgainstLibrary(library, contract)) {
+    push('error', issue.code, issue.message, { kind: 'connectionSelection' }, 'contract');
+  }
+  for (const connection of contract.connectionSelections ?? []) {
+    validateConnectionSelection(connection, production, { db, push });
+  }
+
   const errors = issues.filter((issue) => issue.severity === 'error').length;
   const state = errors > 0 ? 'errors' : issues.length > 0 ? 'warnings' : 'valid';
   db.prepare('UPDATE productions SET validation_state = ? WHERE id = ?').run(state, id);
   return { issues, state, errors, warnings: issues.length - errors };
+}
+
+/**
+ * Check a contract's connection selection against the canonical graph.
+ *
+ * The application declares which kinds it understands and how many each of
+ * its source records may have; the facts themselves stay in canon, where
+ * they belong. Two things are worth separating here. A source record outside
+ * the declared bounds is an error, because the application cannot render
+ * what it asked for. A record connected to something the author has not
+ * selected is only a warning — the connection is perfectly good canon, the
+ * package simply will not carry the other end — and it names that other end
+ * so the production editor can offer to add it. Nothing is traversed
+ * automatically: that is the whole reason choosing one character cannot pull
+ * a world into a package.
+ */
+function validateConnectionSelection(connection, production, { db, push }) {
+  const sources = production.selections[connection.sourceSelection] ?? [];
+  const targets = production.selections[connection.targetSelection] ?? [];
+  if (sources.length === 0) return;
+  const selectedTargets = new Set(targets.map((entity) => entity.id));
+  const kinds = connection.kinds ?? [];
+  if (kinds.length === 0) return;
+  const placeholders = kinds.map(() => '?').join(',');
+  const destination = `selection:${connection.targetSelection}`;
+
+  const held = db.prepare(`
+    SELECT c.source_id, c.target_id, t.name AS target_name, k.forward_label
+    FROM connections c
+    JOIN connection_kinds k ON k.id = c.kind_id
+    JOIN entities t ON t.id = c.target_id
+    WHERE c.kind_id IN (${placeholders}) AND c.status != 'archived'
+  `).all(...kinds);
+
+  const min = connection.minPerSource ?? 0;
+  const max = connection.maxPerSource ?? Infinity;
+
+  for (const source of sources) {
+    const mine = held.filter((row) => row.source_id === source.id);
+    const included = mine.filter((row) => selectedTargets.has(row.target_id));
+    const target = { kind: 'connectionSelection', slot: connection.id, entityId: source.id };
+
+    if (included.length < min) {
+      push('error', 'production.connection_short',
+        `“${connection.label}” needs at least ${min} for ${source.name}; ${included.length} of the ${source.name} connection(s) point at a record selected under “${connection.targetSelection}”.`,
+        target, destination);
+    }
+    if (included.length > max) {
+      push('error', 'production.connection_long',
+        `“${connection.label}” allows at most ${max} for ${source.name}; ${included.length} are selected. That is this application's rule, not a canonical one — deselect the extra, or widen the contract.`,
+        target, destination);
+    }
+    for (const row of mine) {
+      if (selectedTargets.has(row.target_id)) continue;
+      push('warning', 'production.connection_target_unselected',
+        `${source.name} is connected to ${row.target_name}, but ${row.target_name} is not selected under “${connection.targetSelection}”, so this publication will not carry it.`,
+        { ...target, targetEntityId: row.target_id, targetSelection: connection.targetSelection, targetName: row.target_name },
+        destination);
+    }
+  }
 }
 
 function validateAssetSet(set, items, { db, refs, push, entity, destination }) {
