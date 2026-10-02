@@ -8,6 +8,7 @@ import './commands/entity-commands.js';
 import './commands/connection-commands.js';
 import './commands/document-commands.js';
 import './commands/asset-commands.js';
+import './commands/gallery-commands.js';
 import './commands/inbox-commands.js';
 import './commands/production-commands.js';
 import './commands/publication-commands.js';

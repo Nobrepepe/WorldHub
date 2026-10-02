@@ -387,3 +387,17 @@ test('missing blob is reported when generating a rendition', async (t) => {
   fs.rmSync(path.join(root, 'assets', 'originals', hash.slice(0, 2), `${hash}.png`));
   await assert.rejects(() => generateRendition(library, asset.currentVersionId, 'square'), /original file .* missing|integrity/i);
 });
+
+test('two requests for the same rendition at once share one file that stays on disk', async (t) => {
+  const { library, root, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const asset = await importAsset(library, { buffer: await makePng({ alpha: true }), filename: 'pair.png', title: 'Pair' });
+  const [first, second] = await Promise.all([
+    generateRendition(library, asset.currentVersionId, 'portrait_3x4'),
+    generateRendition(library, asset.currentVersionId, 'portrait_3x4'),
+  ]);
+  assert.equal(first.id, second.id, 'one rendering, shared');
+  const rows = library.db.prepare('SELECT * FROM generated_renditions WHERE version_id = ? AND recipe_id = ?').all(asset.currentVersionId, 'portrait_3x4');
+  assert.equal(rows.length, 1);
+  assert.ok(fs.existsSync(path.join(root, rows[0].path)), 'the recorded file exists');
+});
