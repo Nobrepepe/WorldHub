@@ -74,6 +74,14 @@ The rendition editor stores, per version and recipe: focal point (x/y in 0–1),
 
 Audio is copied without transcoding. WAV duration is read from the header; no external executable is required.
 
+## Art and an archived record
+
+Archiving a character does not archive their portraits. The art is its own material, with its own versions and history, and archiving a record is meant to be undone — a cascade would not be, because on restore nothing could tell which art had already been archived on its own.
+
+Instead, art whose every association points at an archived record is **withheld**: passed over by the Assets gallery, by search, and by production validation, which reports `production.asset_withheld` naming the records holding it back. Nothing is written for this. The asset stays `active`, it is still listed in full on the record's own page, the asset screen says why it is missing from the gallery, and the gallery's status filter has a shelf that shows exactly what is being held. Restoring the record brings the art back with no repair step and no reindex. Art linked to no record at all is nobody's to withhold, so it stays.
+
+The rule lives in one place — `withheldSql` / `isAssetWithheld` in `asset-service` — and the archive confirmation counts, in advance, the art that stands on the record alone.
+
 ## Deletion safety
 
 Archiving an asset hides it from browsing but touches no bytes. No automatic process deletes blobs or versions. The Integrity screen's audit lists blobs no version references, explains why each is considered unreferenced, and — only with confirmation — moves them to `trash/` inside the library, from which they can be re-imported. Permanent deletion is not part of routine use.

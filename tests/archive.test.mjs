@@ -8,10 +8,15 @@ import { archiveOverview, previewPurge, purgeArchive } from '../electron/service
 import { installExampleContract } from '../electron/services/contract-service.js';
 import {
   createProduction, setProductionValue, setSelection, setAssetSetItems, setProductionStatus,
+  validateProduction,
 } from '../electron/services/production-service.js';
-import { createEntity, updateEntity } from '../electron/services/entity-service.js';
-import { importAsset, setAssetLinks, setAssetArchived } from '../electron/services/asset-service.js';
+import { createEntity, updateEntity, entityUsage } from '../electron/services/entity-service.js';
+import {
+  importAsset, setAssetLinks, setAssetArchived, listAssets, getAsset,
+  isAssetWithheld, withholdingRecords,
+} from '../electron/services/asset-service.js';
 import { createDocument, setDocumentStatus } from '../electron/services/document-service.js';
+import { searchLibrary } from '../electron/services/search-service.js';
 import { publishProduction } from '../electron/services/publication-service.js';
 
 async function fixture(library) {
@@ -193,4 +198,69 @@ test('purging art a living record still points at clears the reference instead o
   assert.equal(library.db.prepare('SELECT COUNT(*) n FROM entities').get().n, 2, 'the records stay');
   assert.deepEqual(profileNow(), { portrait_asset_id: null, tile_asset_id: null },
     'every display slot that named the purged art is cleared, tile included');
+});
+
+test('art goes out of sight with the last record it belongs to, and comes back with it', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const { world, nao, portrait } = await fixture(library);
+
+  const png = await sharp({ create: { width: 40, height: 40, channels: 3, background: { r: 9, g: 9, b: 9 } } }).png().toBuffer();
+  const shared = await importAsset(library, { buffer: png, filename: 'pair.png', title: 'Nao and Bram' });
+  const bram = createEntity(library, { type: 'character', name: 'Bram', worldId: world.id });
+  setAssetLinks(library, shared.id, [
+    { entityId: nao.id, role: 'character.portrait' },
+    { entityId: bram.id, role: 'character.portrait' },
+  ]);
+  const loose = await importAsset(library, { buffer: png, filename: 'loose.png', title: 'Unattached study' });
+
+  const titles = (options) => listAssets(library, options).map((a) => a.title).sort();
+  assert.deepEqual(titles({}), ['Nao and Bram', 'Nao portrait', 'Unattached study']);
+
+  // The confirmation counts the art that stands on this record alone.
+  assert.deepEqual(entityUsage(library, nao.id).withheldAssets.map((a) => a.title), ['Nao portrait']);
+
+  updateEntity(library, nao.id, { status: 'archived' });
+
+  assert.deepEqual(titles({}), ['Nao and Bram', 'Unattached study'],
+    'art shared with a living record stays, and art linked to nobody was never anyone\'s to withhold');
+  assert.deepEqual(titles({ withheld: 'only' }), ['Nao portrait'], 'the withheld shelf offers it back');
+  assert.deepEqual(titles({ entityId: nao.id }), ['Nao and Bram', 'Nao portrait'],
+    'the record\'s own page still shows everything linked to it');
+
+  const asset = getAsset(library, portrait.id);
+  assert.equal(asset.status, 'active', 'nothing was written to the asset');
+  assert.equal(asset.withheld, true, 'but the asset screen can say why it is missing');
+  assert.equal(isAssetWithheld(library.db, shared.id), false);
+  assert.deepEqual(withholdingRecords(library.db, portrait.id), ['Nao']);
+
+  const foundArt = (query) => (searchLibrary(library, { query }).groups.find((g) => g.group === 'asset')?.items ?? [])
+    .map((item) => item.title).sort();
+  assert.deepEqual(foundArt('nao'), ['Nao and Bram'],
+    'search passes over the withheld art without the index being rewritten');
+
+  // Bram goes too: now the shared art has nobody living left.
+  updateEntity(library, bram.id, { status: 'archived' });
+  assert.deepEqual(titles({}), ['Unattached study']);
+
+  updateEntity(library, nao.id, { status: 'draft' });
+  assert.deepEqual(titles({}), ['Nao and Bram', 'Nao portrait', 'Unattached study'],
+    'restoring the record brings the art back with no repair step');
+  assert.deepEqual(foundArt('nao'), ['Nao and Bram', 'Nao portrait']);
+});
+
+test('a build cannot reach art that is withheld with its record', async (t) => {
+  const { library, cleanup } = await makeTestLibrary();
+  t.after(cleanup);
+  const { nao, portrait, production } = await fixture(library);
+
+  assert.equal(validateProduction(library, production.id).errors, 0);
+
+  updateEntity(library, nao.id, { status: 'archived' });
+  const issues = validateProduction(library, production.id).issues;
+  const withheld = issues.find((issue) => issue.code === 'production.asset_withheld');
+  assert.ok(withheld, 'the asset set reports the art, not only the archived record');
+  assert.match(withheld.message, /Nao portrait/);
+  assert.match(withheld.message, /Nao/);
+  assert.equal(withheld.target.assetId, portrait.id);
 });

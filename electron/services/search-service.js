@@ -224,9 +224,14 @@ function enrich(db, row) {
     const asset = db.prepare('SELECT title, kind, status, updated_at FROM assets WHERE id = ?').get(row.subject_id);
     if (!asset) return null;
     const links = db.prepare(`
-      SELECT e.id, e.type, e.world_id FROM asset_links l JOIN entities e ON e.id = l.entity_id
+      SELECT e.id, e.type, e.world_id, e.status FROM asset_links l JOIN entities e ON e.id = l.entity_id
       WHERE l.asset_id = ? ORDER BY l.position
     `).all(row.subject_id);
+    // Art whose every record is archived is withheld rather than indexed
+    // away: the index still holds it, so restoring the record needs no
+    // rebuild, and search simply passes over it meanwhile. See the rule
+    // in asset-service.
+    if (links.length > 0 && links.every((link) => link.status === 'archived')) return null;
     const roles = db.prepare('SELECT DISTINCT role FROM asset_links WHERE asset_id = ?').all(row.subject_id).map((r) => r.role);
     return { ...base, group: 'asset', title: asset.title, kind: asset.kind, status: asset.status, roles, worldId: worldOfLinks(db, links), updatedAt: asset.updated_at, href: `/asset/${row.subject_id}` };
   }

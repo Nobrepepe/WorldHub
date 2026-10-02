@@ -525,11 +525,20 @@ export function archiveControls(entity, { onChanged }) {
       onclick: async () => {
         const usage = await call('entity.usage', { id: entity.id });
         const affected = usage.documents.length + usage.connections.length + usage.assets.length + usage.productions.length + usage.children.length;
+        const held = usage.withheldAssets.length;
         const confirmed = await confirmOverlay({
           title: `Archive ${entity.name}?`,
-          body: affected === 0
-            ? 'Nothing references this record.'
-            : `This record is referenced by ${usage.documents.length} document(s), ${usage.connections.length} connection(s), ${usage.assets.length} asset link(s), ${usage.productions.length} production(s), and ${usage.children.length} member record(s). They keep their links.`,
+          body: [
+            affected === 0
+              ? 'Nothing references this record.'
+              : `This record is referenced by ${usage.documents.length} document(s), ${usage.connections.length} connection(s), ${usage.assets.length} asset link(s), ${usage.productions.length} production(s), and ${usage.children.length} member record(s). They keep their links.`,
+            // Art is never archived on a record's behalf, but art that
+            // belongs to nobody else goes out of sight with it — the one
+            // consequence of archiving that is not a link staying put.
+            held > 0
+              ? `${held} asset(s) belong to no other record still in canon, so they go out of sight with it: out of the gallery, out of search, and out of any build. They are not archived, and they come back when this record does.`
+              : null,
+          ].filter(Boolean).join(' '),
           guarantee: 'Nothing is deleted. Archived records stay in old publications and can be restored at any time.',
           confirmLabel: 'Archive this record',
           danger: true,
