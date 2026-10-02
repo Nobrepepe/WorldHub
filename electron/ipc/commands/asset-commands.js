@@ -114,6 +114,9 @@ register('asset.list', {
     kind: v.optional(v.enum(['image', 'audio', 'markdown', 'attachment'])),
     worldId: v.optional(v.uuid(), null),
     status: v.optional(v.enum(['active', 'archived']), 'active'),
+    // Art held back because every record it belongs to is archived:
+    // excluded from browsing, 'only' to look at what is being held.
+    withheld: v.optional(v.enum(['exclude', 'include', 'only']), 'exclude'),
     text: v.optional(v.string({ max: 200 })),
     aspect: v.optional(v.enum(['wide', 'tall', 'square'])),
     // Which rendition each thumbUrl should prefer when one already exists.

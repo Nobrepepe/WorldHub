@@ -5,7 +5,7 @@ import { recordActivity } from './activity-service.js';
 import { getContract, contractDrift, validateContractAgainstLibrary } from './contract-service.js';
 import { validateFieldValue, countBounds } from './field-engine.js';
 import { slugify } from './paths.js';
-import { assetDisplayUrl } from './asset-service.js';
+import { assetDisplayUrl, isAssetWithheld, withholdingRecords } from './asset-service.js';
 
 /**
  * Productions reference canonical material without redefining it.
@@ -457,6 +457,9 @@ export function validateProduction(library, id) {
     assetExists: (assetId, kinds) => {
       const asset = db.prepare('SELECT kind, status FROM assets WHERE id = ?').get(assetId);
       if (!asset || asset.status === 'archived') return false;
+      // Art withheld with an archived record is out of reach for a build
+      // just as the record itself is.
+      if (isAssetWithheld(db, assetId)) return false;
       return !kinds || kinds.includes(asset.kind);
     },
   };
@@ -621,6 +624,13 @@ function validateAssetSet(set, items, { db, refs, push, entity, destination }) {
     const asset = db.prepare('SELECT kind, status, title FROM assets WHERE id = ?').get(item.assetId);
     if (!asset || asset.status === 'archived') {
       push('error', 'production.asset_missing', `An asset chosen for “${label}” no longer exists or is archived.`, { ...target, assetId: item.assetId }, destination);
+      continue;
+    }
+    if (isAssetWithheld(db, item.assetId)) {
+      const holders = withholdingRecords(db, item.assetId);
+      push('error', 'production.asset_withheld',
+        `“${asset.title}” belongs only to archived record(s) — ${holders.join(', ')} — so it is withheld. Restore the record, or link the art to one that is still in canon.`,
+        { ...target, assetId: item.assetId }, destination);
       continue;
     }
     if (set.kinds && !set.kinds.includes(asset.kind)) {

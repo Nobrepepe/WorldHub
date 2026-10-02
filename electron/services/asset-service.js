@@ -171,7 +171,7 @@ export function getAsset(library, id) {
     WHERE v.asset_id = ? ORDER BY v.version_number DESC
   `).all(id);
   const links = db.prepare(`
-    SELECT l.id AS link_id, l.role, l.position, e.id, e.name, e.type
+    SELECT l.id AS link_id, l.role, l.position, e.id, e.name, e.type, e.status AS entityStatus
     FROM asset_links l JOIN entities e ON e.id = l.entity_id
     WHERE l.asset_id = ? ORDER BY l.position
   `).all(id);
@@ -190,6 +190,10 @@ export function getAsset(library, id) {
     title: row.title,
     kind: row.kind,
     status: row.status,
+    // Not a status of its own: the asset is active, and every record it
+    // belongs to is archived. The asset screen says so plainly, because
+    // this is why the art is missing from the gallery and from search.
+    withheld: isAssetWithheld(db, id),
     notes: row.notes,
     currentVersionId: row.current_version_id,
     createdAt: row.created_at,
@@ -272,7 +276,42 @@ export function setAssetLinks(library, assetId, links) {
   return getAsset(library, assetId);
 }
 
-export function listAssets(library, { entityId, role, kind, worldId, status = 'active', text, aspect, recipeId = 'tile_16x9', limit = 500 } = {}) {
+/**
+ * Art follows the records it belongs to out of sight.
+ *
+ * Archiving a character does not archive their portraits: the art is its
+ * own material, with its own history, and archiving a record is meant to
+ * be undone. But art whose every association points at an archived record
+ * has nothing left to say in the library at large, so browsing, search,
+ * and production validation pass it over. Nothing is written for this —
+ * the asset stays active, it is still listed on the record's own page,
+ * and restoring the record brings the art back with no repair step.
+ *
+ * Art linked to nobody is nobody's to withhold, so it stays.
+ */
+const WITHHELD = `
+  EXISTS (SELECT 1 FROM asset_links wl WHERE wl.asset_id = %id%)
+  AND NOT EXISTS (
+    SELECT 1 FROM asset_links wl JOIN entities we ON we.id = wl.entity_id
+    WHERE wl.asset_id = %id% AND we.status != 'archived'
+  )`;
+
+const withheldSql = (id) => WITHHELD.replaceAll('%id%', id);
+
+/** The same rule, asked about one asset. */
+export function isAssetWithheld(db, assetId) {
+  return !!db.prepare(`SELECT ${withheldSql('?')} AS withheld`).get(assetId, assetId).withheld;
+}
+
+/** The archived records that are holding an asset back, for messages. */
+export function withholdingRecords(db, assetId) {
+  return db.prepare(`
+    SELECT DISTINCT e.name FROM asset_links l JOIN entities e ON e.id = l.entity_id
+    WHERE l.asset_id = ? AND e.status = 'archived' ORDER BY e.name COLLATE NOCASE
+  `).all(assetId).map((row) => row.name);
+}
+
+export function listAssets(library, { entityId, role, kind, worldId, status = 'active', withheld = 'exclude', text, aspect, recipeId = 'tile_16x9', limit = 500 } = {}) {
   const db = library.db;
   const where = ['a.status = ?'];
   const args = [status];
@@ -288,6 +327,12 @@ export function listAssets(library, { entityId, role, kind, worldId, status = 'a
   } else if (role) {
     where.push('EXISTS (SELECT 1 FROM asset_links l WHERE l.asset_id = a.id AND l.role = ?)');
     args.push(role);
+  }
+  // A record's own page shows everything linked to it, archived or not:
+  // the rule is about the library at large, not about a record you asked
+  // for by name. 'only' is how the gallery offers the withheld back.
+  if (!entityId && withheld !== 'include') {
+    where.push(withheld === 'only' ? withheldSql('a.id') : `NOT (${withheldSql('a.id')})`);
   }
   if (worldId) {
     where.push(`EXISTS (

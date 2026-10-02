@@ -302,7 +302,20 @@ export function entityUsage(library, id) {
   const children = db.prepare(`
     SELECT id, type, name, status FROM entities WHERE world_id = ? ORDER BY name COLLATE NOCASE
   `).all(id);
-  return { documents, connections, assets, productions, children };
+  // Art that stands on this record alone: archiving the record withholds
+  // it from the gallery, from search, and from builds, and restoring the
+  // record brings it back. See the rule in asset-service.
+  const withheldAssets = db.prepare(`
+    SELECT DISTINCT a.id, a.title FROM assets a
+    JOIN asset_links l ON l.asset_id = a.id
+    WHERE l.entity_id = ? AND a.status = 'active'
+      AND NOT EXISTS (
+        SELECT 1 FROM asset_links o JOIN entities e ON e.id = o.entity_id
+        WHERE o.asset_id = a.id AND o.entity_id != ? AND e.status != 'archived'
+      )
+    ORDER BY a.title COLLATE NOCASE
+  `).all(id, id);
+  return { documents, connections, assets, productions, children, withheldAssets };
 }
 
 /** Archive an entity. The caller must show entityUsage() first. */

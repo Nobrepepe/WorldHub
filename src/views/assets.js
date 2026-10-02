@@ -37,12 +37,20 @@ export async function renderAssets() {
       role: filter.role || undefined,
       kind: filter.kind || undefined,
       worldId: filter.worldId || undefined,
-      status: filter.status,
+      // Withheld art is active art held back because every record it
+      // belongs to is archived. It is its own shelf rather than a third
+      // status, so nothing the gallery hides is unreachable.
+      status: filter.status === 'withheld' ? 'active' : filter.status,
+      withheld: filter.status === 'withheld' ? 'only' : filter.status === 'archived' ? 'include' : 'exclude',
       aspect: filter.aspect || undefined,
     });
     if (assets.length === 0) {
       galleryHost.append(el('p', { class: 'empty-state' },
-        'Nothing has been filed yet — bring the first folder into the Inbox, or import files directly.'));
+        filter.status === 'withheld'
+          ? 'No art is being held back — every asset still belongs to at least one record that is in canon.'
+          : filter.status === 'archived'
+            ? 'Nothing has been archived.'
+            : 'Nothing has been filed yet — bring the first folder into the Inbox, or import files directly.'));
       return;
     }
     const gallery = el('div', { class: 'gallery assets-gallery', role: 'list' });
@@ -128,7 +136,11 @@ export async function renderAssets() {
         el('span', { class: 'eyebrow' }, 'Status'),
         selectInput({
           value: 'active', ariaLabel: 'Filter by status',
-          options: [{ value: 'active', label: 'Active' }, { value: 'archived', label: 'Archived' }],
+          options: [
+            { value: 'active', label: 'Active' },
+            { value: 'withheld', label: 'Withheld with an archived record' },
+            { value: 'archived', label: 'Archived' },
+          ],
           onChange: (value) => { filter.status = value; render(); },
         }),
       ),
@@ -167,7 +179,7 @@ export async function renderAssetDetail({ id }) {
       el('span', { class: 'eyebrow' }, `Asset · ${asset.kind}`),
       el('h1', {}, asset.title),
       el('p', { class: 'meta-line' },
-        [asset.status === 'archived' ? 'Archived' : 'Active',
+        [asset.status === 'archived' ? 'Archived' : asset.withheld ? 'Withheld' : 'Active',
           `${asset.versions.length} version(s)`,
           current ? formatBytes(current.size) : '',
           current?.width ? `${current.width}×${current.height}` : '',
@@ -175,6 +187,15 @@ export async function renderAssetDetail({ id }) {
         ].filter(Boolean).join(' · ')),
     ),
   );
+
+  /* Art is never archived on a record's behalf, so the one thing the
+     author cannot otherwise see is why it left the gallery. */
+  if (asset.withheld && asset.status !== 'archived') {
+    host.append(el('div', { class: 'section' },
+      el('p', { class: 'section-note' },
+        'This art is held back from the gallery, from search, and from builds because every record it belongs to is archived. '
+        + 'It is not archived itself, and nothing has been changed: restore a record below, or associate the art with one still in canon, and it returns.')));
+  }
 
   /* current art or media */
   if (asset.kind === 'image' && asset.url) {
@@ -218,7 +239,8 @@ export async function renderAssetDetail({ id }) {
         list.append(el('li', { class: 'row' },
           el('div', { class: 'row-main' },
             el('div', { class: 'row-title' }, link.name),
-            el('div', { class: 'row-sub' }, `${link.type} · ${link.role}`),
+            el('div', { class: 'row-sub' },
+              [link.type, link.role, link.entityStatus === 'archived' ? 'archived' : null].filter(Boolean).join(' · ')),
           ),
           !readOnly ? el('div', { class: 'row-side' },
             el('button', {
